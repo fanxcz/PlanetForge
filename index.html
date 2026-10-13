@@ -21,6 +21,7 @@
         <button class="icon-button history-button" id="undoBtn" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 7 7v1"/></svg></button>
         <button class="icon-button history-button" id="redoBtn" title="Повторить (Ctrl+Y)" aria-label="Повторить" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0-7 7v1"/></svg></button>
         <button class="icon-button" id="shareBtn" title="Скопировать ссылку на этот мир" aria-label="Поделиться миром"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4"/></svg></button>
+        <button class="icon-button" id="galleryBtn" title="Галерея примеров миров" aria-label="Галерея примеров миров"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
         <button class="icon-button" id="savedWorldsBtn" title="Сохранённые миры" aria-label="Сохранённые миры"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg></button>
         <button class="button button-quiet" id="importBtn"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Импорт</span></button>
         <button class="button button-primary" id="exportBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Экспорт</span></button>
@@ -161,6 +162,12 @@
     <form method="dialog" class="modal-head"><div><span class="eyebrow">LOCAL ARCHIVE</span><h2>Сохранённые миры</h2></div><button class="icon-button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
     <div id="savedWorldsList" class="saved-worlds-list"></div>
     <div class="modal-foot"><span>Миры хранятся только в вашем браузере.</span><button class="button button-quiet" id="closeSavedBtn">Готово</button></div>
+  </dialog>
+  <dialog id="galleryDialog" class="modal gallery-modal">
+    <form method="dialog" class="modal-head"><div><span class="eyebrow">PLANET ARCHIVE / CURATED WORLDS</span><h2>Галерея миров</h2></div><button class="icon-button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
+    <p class="gallery-intro">Шесть стартовых миров с фиксированными seed. Откройте любой, изменяйте рельеф и климат, а затем сохраните или отправьте собственную ссылку.</p>
+    <div id="galleryWorldsList" class="gallery-grid"></div>
+    <div class="modal-foot"><span>Примеры встроены в сайт; публичная пользовательская галерея пока не требует аккаунтов и не сохраняет чужие проекты на сервере.</span><button class="button button-quiet" id="closeGalleryBtn">Закрыть</button></div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <input type="file" id="importFile" accept=".json,application/json" hidden>

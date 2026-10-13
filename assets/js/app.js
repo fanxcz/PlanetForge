@@ -28,6 +28,14 @@
     volcanic:{seaLevel:50,landmass:3,relief:10,temperature:9,humidity:30,tectonics:94,erosion:16,season:50}
   };
   const DEFAULTS = { name: "Aurelia", seed: 840271, ...PRESETS.temperate, preset: "temperate" };
+  const GALLERY_WORLDS = [
+    {name:"Aurelia",seed:840271,preset:"temperate",category:"Terrestrial",description:"Умеренный мир с океанами, лесами и разнообразным рельефом.",orb:"temperate"},
+    {name:"Pelagos",seed:316804,preset:"archipelago",category:"Oceanic",description:"Океаническая планета с россыпями островов и влажным климатом.",orb:"archipelago"},
+    {name:"Sirocco",seed:725091,preset:"desert",category:"Arid",description:"Жаркие материки, редкие влажные области и золотистые пустыни.",orb:"desert"},
+    {name:"Nivara",seed:491207,preset:"ice",category:"Cryogenic",description:"Холодный мир с ледяными широтами и обширными снежными зонами.",orb:"ice"},
+    {name:"Xanthe",seed:682413,preset:"alien",category:"Exotic",description:"Экзотическая планета с густой атмосферной влагой и необычными биомами.",orb:"alien"},
+    {name:"Pyraxis",seed:908137,preset:"volcanic",category:"Volcanic",description:"Активная кора, суровый рельеф и контрастные вулканические области.",orb:"volcanic"}
+  ];
   const $ = (id) => document.getElementById(id);
   const canvas = $("planetCanvas");
   const glCanvas = $("globe3dCanvas");
@@ -969,6 +977,38 @@
       showToast("Не удалось сохранить: хранилище браузера недоступно");
     }
   }
+  function openGalleryDialog() {
+    const list = $("galleryWorldsList");
+    list.innerHTML = GALLERY_WORLDS.map((world, index) =>
+      '<article class="gallery-card">' +
+        '<div class="gallery-preview gallery-orb-' + world.orb + '"><span class="gallery-orb"></span><span class="gallery-starfield"></span><span class="gallery-category">' + escapeHTML(world.category) + '</span></div>' +
+        '<div class="gallery-card-copy"><div class="gallery-card-title"><strong>' + escapeHTML(world.name) + '</strong><small>SEED ' + world.seed + '</small></div>' +
+        '<p>' + escapeHTML(world.description) + '</p>' +
+        '<button class="button button-quiet gallery-load-button" data-gallery-index="' + index + '" type="button">Открыть мир</button></div></article>'
+    ).join("");
+    $("galleryDialog").showModal();
+  }
+  function loadGalleryWorld(index) {
+    const world = GALLERY_WORLDS[index];
+    if (!world || !PRESETS[world.preset]) return;
+    checkpointHistory();
+    state.name = world.name;
+    state.seed = world.seed;
+    state.preset = world.preset;
+    Object.assign(state, PRESETS[world.preset]);
+    state.civilizationSeed = (world.seed ^ 0x51ed1234) >>> 0;
+    state.customCities = [];
+    state.cityNames = {};
+    state.layer = "biome";
+    state.view = "globe";
+    state.rotation = 0;
+    state.zoom = 1;
+    updateInterface();
+    setView("globe");
+    $("galleryDialog").close();
+    scheduleGenerate();
+    showToast("Открываем мир «" + world.name + "»");
+  }
   function openSavedDialog() {
     drawSavedWorlds();
     $("savedDialog").showModal();
@@ -1176,6 +1216,12 @@
   $("saveWorldBtn").addEventListener("click", saveWorld);
   $("savedWorldsBtn").addEventListener("click", openSavedDialog);
   $("closeSavedBtn").addEventListener("click", () => $("savedDialog").close());
+  $("galleryBtn").addEventListener("click", openGalleryDialog);
+  $("closeGalleryBtn").addEventListener("click", () => $("galleryDialog").close());
+  $("galleryWorldsList").addEventListener("click", event => {
+    const button = event.target.closest("[data-gallery-index]");
+    if (button) loadGalleryWorld(Number(button.dataset.galleryIndex));
+  });
   $("copySeedBtn").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(String(state.seed));

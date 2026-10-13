@@ -18,6 +18,7 @@
 - **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
+- **Curated world gallery:** six named example planets with fixed seeds and distinct presets; examples can be opened, edited, saved, and shared entirely offline.
 - **Native-resolution PNG export:** 512×256 for the current view, or 2048×1024 and 4096×2048 generated from the same seed and settings in a dedicated Worker. Terrain, climate, and biome detail are regenerated at the target resolution; river, political, city, and trade overlays are layered from the editor map. Geography can also be exported as CSV.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
@@ -25,14 +26,14 @@
 - **Procedural hydrology:** downhill-flow accumulation draws river channels across the generated terrain.
 - **Civilization generator:** settlements favor habitable land near rivers and coasts; capitals define spherical territories, and trade routes connect towns within a state.
 - **Optional overlays:** toggle rivers, cities, trade routes, and national boundaries independently; regenerate civilizations without rebuilding the planet.
-- **Export:** rendered PNG map, portable JSON project, and CSV biome statistics.
+- **Export:** native-resolution PNG, portable JSON project, CSV biome statistics, and city/trade-route geography CSV.
 - **Import and local archive:** save and load projects in the browser's local storage.
 - **Responsive layout** for desktop, tablet, and mobile screens.
 - **Privacy-first:** world generation happens in the browser. Saved worlds are not sent to a server.
 
 ## Run locally
 
-No build system is needed. Clone or download the repository and open `index.html` in a modern browser. For a local HTTP server, use any static server, for example:
+No build system or npm dependencies are needed. Use a local HTTP server rather than opening `index.html` directly as a `file://` URL, because browsers restrict Web Workers on local files. For example:
 
 ```bash
 python3 -m http.server 8000
@@ -59,10 +60,19 @@ PlanetForge/
 ├── index.html
 ├── assets/
 │   ├── css/style.css
-│   ├── js/app.js
-│   └── favicon.svg
+│   ├── favicon.svg
+│   └── js/
+│       ├── app.js
+│       ├── generator.js
+│       ├── globe3d.js
+│       ├── history.js
+│       ├── share.js
+│       ├── planet-worker.js
+│       └── export-worker.js
+├── scripts/smoke-test.mjs
 ├── .github/workflows/pages.yml
 ├── .nojekyll
+├── LICENSE
 └── README.md
 ```
 

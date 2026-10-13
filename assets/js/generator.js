@@ -95,5 +95,5 @@ function generateFields(config){
  return{width:W,height: H,seed,heightField:height,temperature,moisture,biome,counts,landCount,totalTemp,threshold};
 }
 const root=typeof self!=="undefined"?self:globalThis;
-root.PlanetForgeGenerator={generateFields};
+root.PlanetForgeGenerator={generateFields,renderTexture};
 })();
