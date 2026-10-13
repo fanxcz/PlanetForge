@@ -485,3 +485,16 @@ input[type=range]{accent-color:#34795d}
 :focus-visible{outline:2px solid #36765a;outline-offset:2px}
 button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #36765a;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* Searchable local archive and categorized example library */
+.archive-search{display:grid;gap:6px;padding:12px 18px;border-bottom:1px solid #d7ddd8}
+.archive-search label{color:#68766c;font-size:10px}
+.archive-search .text-input{width:100%;height:34px}
+.snapshot-version{display:inline-block;margin-left:4px;padding:2px 4px;border:1px solid #c9d8cc;border-radius:3px;color:#49765a;font-size:9px;font-weight:600}
+.gallery-filters{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(150px,1fr);gap:12px;padding:12px 16px 2px}
+.gallery-filters label{display:grid;gap:6px;color:#5e6d61;font-size:10px}
+.gallery-filters .text-input,.gallery-filters .select-input{width:100%;height:34px}
+.gallery-results-summary{margin:0;padding:6px 17px 0;color:#748176;font-size:9px}
+.gallery-empty{grid-column:1/-1;padding:28px 18px;text-align:center;color:#66756a;font-size:11px;line-height:1.7;border:1px dashed #cbd6cd;border-radius:4px;background:#f8faf7}
+@media(max-width:680px){.gallery-filters{grid-template-columns:1fr;padding:10px 12px 2px;gap:8px}.archive-search{padding:10px 12px}}

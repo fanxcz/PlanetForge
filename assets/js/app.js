@@ -35,7 +35,13 @@
     {name:"Sirocco",seed:725091,preset:"desert",category:"Arid",description:"Жаркие материки, редкие влажные области и золотистые пустыни.",orb:"desert"},
     {name:"Nivara",seed:491207,preset:"ice",category:"Cryogenic",description:"Холодный мир с ледяными широтами и обширными снежными зонами.",orb:"ice"},
     {name:"Xanthe",seed:682413,preset:"alien",category:"Exotic",description:"Экзотическая планета с густой атмосферной влагой и необычными биомами.",orb:"alien"},
-    {name:"Pyraxis",seed:908137,preset:"volcanic",category:"Volcanic",description:"Активная кора, суровый рельеф и контрастные вулканические области.",orb:"volcanic"}
+    {name:"Pyraxis",seed:908137,preset:"volcanic",category:"Volcanic",description:"Активная кора, суровый рельеф и контрастные вулканические области.",orb:"volcanic"},
+    {name:"Thessara",seed:554093,preset:"temperate",category:"Terrestrial",description:"Контрастные континенты и умеренные широты.",orb:"temperate"},
+    {name:"Nacre",seed:802671,preset:"archipelago",category:"Oceanic",description:"Цепочки островов над глубокими океанами.",orb:"archipelago"},
+    {name:"Solenne",seed:388104,preset:"desert",category:"Arid",description:"Сухие плато с редкими зелёными долинами.",orb:"desert"},
+    {name:"Eirlys",seed:271846,preset:"ice",category:"Cryogenic",description:"Холодная планета с ледяными материками.",orb:"ice"},
+    {name:"Verdancia",seed:743215,preset:"alien",category:"Exotic",description:"Влажный чужой мир с обширными биомами.",orb:"alien"},
+    {name:"Morvane",seed:619431,preset:"volcanic",category:"Volcanic",description:"Вулканический мир с резкими высотными переходами.",orb:"volcanic"}
   ];
   const $ = (id) => document.getElementById(id);
   const canvas = $("planetCanvas");
@@ -1210,27 +1216,37 @@
   }
   function saveWorld() {
     const world = { id: String(Date.now()) + "-" + String(Math.floor(Math.random() * 100000)), ...projectJSON(), savedAt: new Date().toISOString(), stats: stats ? { landPercent: Number(stats.landPercent.toFixed(2)), meanTemp: Number(stats.meanTemp.toFixed(1)), uniqueBiomes: stats.uniqueBiomes } : null };
-    const worlds = readSavedWorlds().filter((item) => item.seed !== world.seed || item.name !== world.name);
+    const worlds=readSavedWorlds(),matching=worlds.filter(item=>item.seed===world.seed&&item.name===world.name);
+    world.revision=matching.length?Math.max(...matching.map(item=>Number(item.revision)||1))+1:1;
     worlds.unshift(world);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(worlds.slice(0, 30)));
-      showToast("«" + world.name + "» сохранена в локальный архив");
-    } catch (error) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(worlds.slice(0,30)));
+      showToast("Снимок v"+world.revision+" мира «"+world.name+"» сохранён в локальный архив");
+    } catch (_) {
       showToast("Не удалось сохранить: хранилище браузера недоступно");
     }
   }
-  function openGalleryDialog() {
-    const list = $("galleryWorldsList");
-    list.innerHTML = GALLERY_WORLDS.map((world, index) =>
+  function renderGalleryWorlds() {
+    const list=$("galleryWorldsList"),query=$("gallerySearch").value.trim().toLocaleLowerCase(),category=$("galleryCategory").value;
+    const worlds=GALLERY_WORLDS.map((world,index)=>({...world,index})).filter(world=>
+      (category==="all"||world.category===category)&&
+      (!query||(world.name+" "+world.seed+" "+world.category+" "+world.description).toLocaleLowerCase().includes(query))
+    );
+    $("galleryResultsSummary").textContent=worlds.length+" из "+GALLERY_WORLDS.length+" миров";
+    if(!worlds.length){list.innerHTML='<div class="gallery-empty">Нет планет по этому запросу. Измените поиск или тип мира.</div>';return;}
+    list.innerHTML=worlds.map(world=>
       '<article class="gallery-card">' +
         '<div class="gallery-preview gallery-orb-' + world.orb + '"><span class="gallery-orb"></span><span class="gallery-starfield"></span><span class="gallery-category">' + escapeHTML(world.category) + '</span></div>' +
         '<div class="gallery-card-copy"><div class="gallery-card-title"><strong>' + escapeHTML(world.name) + '</strong><small>SEED ' + world.seed + '</small></div>' +
         '<p>' + escapeHTML(world.description) + '</p>' +
-        '<button class="button button-quiet gallery-load-button" data-gallery-index="' + index + '" type="button">Открыть мир</button></div></article>'
+        '<button class="button button-quiet gallery-load-button" data-gallery-index="' + world.index + '" type="button">Открыть мир</button></div></article>'
     ).join("");
+  }
+  function openGalleryDialog() {
+    renderGalleryWorlds();
     $("galleryDialog").showModal();
   }
-  function loadGalleryWorld(index) {
+    function loadGalleryWorld(index) {
     const world = GALLERY_WORLDS[index];
     if (!world || !PRESETS[world.preset]) return;
     checkpointHistory();
@@ -1297,28 +1313,24 @@
     $("savedDialog").showModal();
   }
   function drawSavedWorlds() {
-    const worlds = readSavedWorlds();
-    const list = $("savedWorldsList");
-    if (!worlds.length) {
-      list.innerHTML = '<div class="empty-archive"><strong>Архив пока пуст</strong>Сохраните планету, чтобы она появилась здесь.<br>Миры остаются на этом устройстве.</div>';
+    const worlds=readSavedWorlds(),list=$("savedWorldsList"),query=$("savedSearch").value.trim().toLocaleLowerCase();
+    if(!worlds.length){
+      list.innerHTML='<div class="empty-archive"><strong>Архив пока пуст</strong>Сохраните планету, чтобы она появилась здесь.<br>Миры остаются на этом устройстве.</div>';
       return;
     }
-    list.innerHTML = worlds.map((world) => {
-      const date = world.savedAt ? new Date(world.savedAt).toLocaleDateString() : "";
-      return '<div class="saved-item"><span class="saved-thumb"></span><div class="saved-item-main"><strong>' + escapeHTML(world.name || "Безымянный мир") + '</strong><small>SEED ' + Number(world.seed) + ' · ' + date + '</small></div><div class="saved-item-actions"><button data-load="' + escapeHTML(world.id) + '">Открыть</button><button data-delete="' + escapeHTML(world.id) + '" aria-label="Удалить сохранённый мир">×</button></div></div>';
+    const filtered=worlds.filter(world=>(String(world.name||"").toLocaleLowerCase().includes(query)||String(world.seed).includes(query)||("v"+(world.revision||1)).includes(query)));
+    if(!filtered.length){list.innerHTML='<div class="empty-archive"><strong>Ничего не найдено</strong>Измените запрос или очистите поле поиска.</div>';return;}
+    list.innerHTML=filtered.map(world=>{
+      const date=world.savedAt?new Date(world.savedAt).toLocaleDateString():"";
+      return '<div class="saved-item"><span class="saved-thumb"></span><div class="saved-item-main"><strong>'+escapeHTML(world.name||"Безымянный мир")+' <small class="snapshot-version">v'+Number(world.revision||1)+'</small></strong><small>SEED '+Number(world.seed)+' · '+date+'</small></div><div class="saved-item-actions"><button data-load="'+escapeHTML(world.id)+'">Открыть</button><button data-delete="'+escapeHTML(world.id)+'" aria-label="Удалить сохранённый снимок">×</button></div></div>';
     }).join("");
-    list.querySelectorAll("[data-load]").forEach((button) => button.addEventListener("click", () => {
-      const world = readSavedWorlds().find((item) => item.id === button.dataset.load);
-      if (!world) return;
-      restoreProject(world);
-      $("savedDialog").close();
-      showToast("Загружен мир «" + state.name + "»");
+    list.querySelectorAll("[data-load]").forEach(button=>button.addEventListener("click",()=>{
+      const world=readSavedWorlds().find(item=>item.id===button.dataset.load);if(!world)return;
+      restoreProject(world);$("savedDialog").close();showToast("Загружен снимок v"+Number(world.revision||1)+" мира «"+state.name+"»");
     }));
-    list.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => {
-      const worldsNow = readSavedWorlds().filter((item) => item.id !== button.dataset.delete);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(worldsNow));
-      drawSavedWorlds();
-      showToast("Сохранение удалено");
+    list.querySelectorAll("[data-delete]").forEach(button=>button.addEventListener("click",()=>{
+      const worldsNow=readSavedWorlds().filter(item=>item.id!==button.dataset.delete);
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(worldsNow));drawSavedWorlds();showToast("Снимок удалён");
     }));
   }
   function restoreProject(input) {
@@ -1563,8 +1575,11 @@
   });
   $("saveWorldBtn").addEventListener("click", saveWorld);
   $("savedWorldsBtn").addEventListener("click", openSavedDialog);
+  $("savedSearch").addEventListener("input",drawSavedWorlds);
   $("closeSavedBtn").addEventListener("click", () => $("savedDialog").close());
   $("galleryBtn").addEventListener("click", openGalleryDialog);
+  $("gallerySearch").addEventListener("input",renderGalleryWorlds);
+  $("galleryCategory").addEventListener("change",renderGalleryWorlds);
   $("closeGalleryBtn").addEventListener("click", () => $("galleryDialog").close());
   $("galleryWorldsList").addEventListener("click", event => {
     const button = event.target.closest("[data-gallery-index]");
@@ -1593,6 +1608,7 @@
     const data=activeData,{mode,radius,strength}=terrainBrushSettings(),height=data.heightField,base=terrainStrokeBase||height;
     const changed=new Set(),latitude=(90-(center.y+.5)/MAP_H*180)*Math.PI/180,cosLat=Math.max(.25,Math.cos(latitude));
     const yRadius=radius,xRadius=Math.ceil(radius/cosLat);
+    let overrideCount=Object.keys(state.customHeightOverrides).length;
     for(let oy=-yRadius;oy<=yRadius;oy++){
       const y=center.y+oy;if(y<0||y>=MAP_H)continue;
       for(let ox=-xRadius;ox<=xRadius;ox++){
@@ -1612,8 +1628,10 @@
         else if(mode==="water")next=lerp(current,data.threshold-.035,clamp(amount*2.4,0,1));
         next=clamp(next,0,1.15);
         if(Math.abs(next-current)<.00005)continue;
-        if(!Object.prototype.hasOwnProperty.call(state.customHeightOverrides,String(index))&&Object.keys(state.customHeightOverrides).length>=18000)continue;
-        height[index]=next;state.customHeightOverrides[String(index)]=Number(next.toFixed(5));changed.add(index);
+        const key=String(index),wasStored=Object.prototype.hasOwnProperty.call(state.customHeightOverrides,key);
+        if(!wasStored&&overrideCount>=18000)continue;
+        height[index]=next;state.customHeightOverrides[key]=Number(next.toFixed(5));if(!wasStored)overrideCount++;
+        changed.add(index);
       }
     }
     if(changed.size){drawTexture();renderCurrentView();$("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";}

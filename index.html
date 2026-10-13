@@ -187,12 +187,18 @@
 
   <dialog id="savedDialog" class="modal">
     <form method="dialog" class="modal-head"><div><span class="eyebrow">LOCAL ARCHIVE</span><h2>Сохранённые миры</h2></div><button class="icon-button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
+    <div class="archive-search"><label for="savedSearch">Поиск в библиотеке</label><input id="savedSearch" class="text-input" type="search" placeholder="Название, seed или версия"></div>
     <div id="savedWorldsList" class="saved-worlds-list"></div>
     <div class="modal-foot"><span>Миры хранятся только в вашем браузере.</span><button class="button button-quiet" id="closeSavedBtn">Готово</button></div>
   </dialog>
   <dialog id="galleryDialog" class="modal gallery-modal">
     <form method="dialog" class="modal-head"><div><span class="eyebrow">PLANET ARCHIVE / CURATED WORLDS</span><h2>Галерея миров</h2></div><button class="icon-button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
-    <p class="gallery-intro">Шесть стартовых миров с фиксированными seed. Откройте любой, изменяйте рельеф и климат, а затем сохраните или отправьте собственную ссылку.</p>
+    <p class="gallery-intro">Двенадцать миров с фиксированными seed. Ищите по названию, seed или климатическому типу, открывайте и редактируйте понравившиеся миры.</p>
+    <div class="gallery-filters">
+      <label for="gallerySearch">Поиск<input id="gallerySearch" class="text-input" type="search" placeholder="Название, seed или описание"></label>
+      <label for="galleryCategory">Тип мира<select id="galleryCategory" class="select-input"><option value="all">Все типы</option><option value="Terrestrial">Землеподобный</option><option value="Oceanic">Океанический</option><option value="Arid">Засушливый</option><option value="Cryogenic">Ледяной</option><option value="Exotic">Экзотический</option><option value="Volcanic">Вулканический</option></select></label>
+    </div>
+    <p id="galleryResultsSummary" class="gallery-results-summary" aria-live="polite"></p>
     <div id="galleryWorldsList" class="gallery-grid"></div>
     <div class="modal-foot"><span>Примеры встроены в сайт; публичная пользовательская галерея пока не требует аккаунтов и не сохраняет чужие проекты на сервере.</span><button class="button button-quiet" id="closeGalleryBtn">Закрыть</button></div>
   </dialog>

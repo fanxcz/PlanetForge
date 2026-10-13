@@ -20,7 +20,8 @@
 - **Manual political borders:** turn on the border brush in map view, select a country, and paint land cells. Painted cells persist in project JSON, share links, auto-save, and undo/redo history.
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
-- **Curated world gallery:** six named example planets with fixed seeds and distinct presets; examples can be opened, edited, saved, and shared entirely offline.
+- **Curated world gallery:** twelve named example planets with fixed seeds and category filters/search; examples can be opened, edited, saved, and shared entirely offline.
+- **Local versioned library:** search saved worlds by name/seed and keep numbered snapshots for the same planet in the browser archive.
 - **Game asset export:** grayscale heightmap preview, 2K/4K individual layers, or a full ZIP pack with eight thematic PNG layers, 16-bit big-endian RAW elevation, tangent-space normal map, biome-ID and land/water masks, manifest metadata, project JSON, and CSV statistics/geography. Pack rendering runs in a Worker and reuses one field generation for all layers.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
@@ -32,7 +33,7 @@
 - **Export:** native-resolution PNG, portable JSON project, CSV biome statistics/geography, and a game-ready ZIP with RAW16 height data, normal map, masks, and import metadata.
 - **Import and local archive:** save and load projects in the browser's local storage.
 - **Responsive layout** for desktop, tablet, and mobile screens.
-- **Privacy-first:** world generation happens in the browser. Saved worlds and auto-saves are not sent to a server. The gallery is a curated offline set, not a crowdsourced public gallery.
+- **Privacy-first:** world generation happens in the browser. Saved worlds and auto-saves are not sent to a server. The gallery is a curated offline set, not a crowdsourced public gallery. The local archive keeps up to 30 numbered snapshots and supports search.
 
 ## Run locally
 
