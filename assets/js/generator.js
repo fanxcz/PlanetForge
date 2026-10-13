@@ -18,6 +18,7 @@ const COUNTRY_COLORS=[[55,132,148],[119,103,172],[169,121,67],[73,142,105],[170,
 const HEIGHT_STOPS=[[0,[8,25,51]],[.30,[17,55,88]],[.48,[40,117,137]],[.50,[52,117,108]],[.56,[88,142,90]],[.64,[143,157,91]],[.73,[166,129,88]],[.84,[137,105,92]],[.94,[178,184,177]],[1,[246,250,247]]];
 const TEMP_STOPS=[[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179,203,143]],[.64,[228,196,105]],[.8,[217,125,77]],[1,[151,55,62]]];
 const MOIST_STOPS=[[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
+const TECTONIC_STOPS=[[0,[18,31,43]],[.08,[31,66,80]],[.22,[70,120,116]],[.45,[181,139,85]],[.7,[216,107,70]],[1,[239,70,63]]];
 function hueColor(t,stops){t=clamp(t,0,1);for(let i=1;i<stops.length;i++)if(t<=stops[i][0]){const a=stops[i-1],b=stops[i],q=(t-a[0])/Math.max(.00001,b[0]-a[0]);return[Math.round(lerp(a[1][0],b[1][0],q)),Math.round(lerp(a[1][1],b[1][1],q)),Math.round(lerp(a[1][2],b[1][2],q))];}return stops[stops.length-1][1].slice();}
 function renderTexture(config,layer="biome",options={}){
  const fields=generateFields(config),W=fields.width,H=fields.height,size=W*H,threshold=fields.threshold;
@@ -31,6 +32,8 @@ function renderTexture(config,layer="biome",options={}){
    const slope=clamp(1+(fields.heightField[left]-fields.heightField[right])*4.8+(fields.heightField[up]-fields.heightField[down])*3.2,.72,1.24);
    const baseIndex=baseY*baseW+Math.min(baseW-1,Math.floor(x/W*baseW));let color;
    if(layer==="elevation")color=hueColor(clamp((h-threshold+.18)/.46,0,1),HEIGHT_STOPS);
+   else if(layer==="heightmap"){const gray=Math.round(clamp(h,0,1)*255);color=[gray,gray,gray];}
+   else if(layer==="tectonics")color=hueColor(fields.tectonicField[i],TECTONIC_STOPS);
    else if(layer==="temperature")color=hueColor((fields.temperature[i]+35)/72,TEMP_STOPS);
    else if(layer==="moisture")color=hueColor(fields.moisture[i],MOIST_STOPS);
    else if(layer==="hydrology")color=h<=threshold?[Math.round(8+clamp((threshold-h)*95,0,20)),Math.round(27+clamp((threshold-h)*110,0,30)),Math.round(47+clamp((threshold-h)*150,0,45))]:hueColor(clamp((h-threshold+.18)/.46,0,1),HEIGHT_STOPS);
@@ -52,7 +55,7 @@ function generateFields(config){
  const tempOffset=val("temperature",0),humidity=val("humidity",50)/100,relief=val("relief",5);
  const tectonics=val("tectonics",56)/100,erosion=val("erosion",28)/100,seasonPhase=val("season",50)/100*TAU;
  const threshold=.535+(val("seaLevel",50)-50)*.0042-val("landmass",0)*.0045;
- const height=new Float32Array(size),temperature=new Float32Array(size),moisture=new Float32Array(size),biome=new Uint8Array(size),counts=new Uint32Array(12);
+ const height=new Float32Array(size),temperature=new Float32Array(size),moisture=new Float32Array(size),tectonicField=new Float32Array(size),biome=new Uint8Array(size),counts=new Uint32Array(12);
  const plateRandom=seededRandom(seed^0x6a09e667);
  const plates=Array.from({length:14},()=>{const lat=Math.asin(plateRandom()*2-1),lon=plateRandom()*TAU-Math.PI;return{x:Math.cos(lat)*Math.cos(lon),y:Math.sin(lat),z:Math.cos(lat)*Math.sin(lon),continental:plateRandom()>.46,mode:Math.floor(plateRandom()*3)};});
  for(let y=0;y<H;y++){
@@ -63,6 +66,7 @@ function generateFields(config){
    let best=-Infinity,second=-Infinity,bestIndex=0,secondIndex=0;
    for(let p=0;p<plates.length;p++){const plate=plates[p],dot=sx*plate.x+sy*plate.y+sz*plate.z;if(dot>best){second=best;secondIndex=bestIndex;best=dot;bestIndex=p;}else if(dot>second){second=dot;secondIndex=p;}}
    const boundary=clamp(1-(best-second)*26,0,1),primary=plates[bestIndex],neighbour=plates[secondIndex];
+   tectonicField[y*W+x]=boundary*tectonics;
    let stress;
    if(primary.continental&&neighbour.continental)stress=.085;
    else if(primary.continental!==neighbour.continental)stress=primary.continental ? .052 : -.045;
@@ -94,7 +98,7 @@ function generateFields(config){
    biome[idx]=b;counts[b]++;if(h>threshold)landCount++;
   }
  }
- return{width:W,height: H,seed,heightField:height,temperature,moisture,biome,counts,landCount,totalTemp,threshold};
+ return{width:W,height:H,seed,heightField:height,temperature,moisture,tectonicField,biome,counts,landCount,totalTemp,threshold};
 }
 const root=typeof self!=="undefined"?self:globalThis;
 root.PlanetForgeGenerator={generateFields,renderTexture};

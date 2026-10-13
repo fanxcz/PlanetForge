@@ -64,6 +64,9 @@
   let autosaveTimer = 0;
   let pointerState = null;
   let dragMoved = false;
+  let borderPaintPointer = null;
+  let lastBorderPaintPoint = null;
+  let lastBorderPaintAt = 0;
   let exportMenu = null;
   let activeData = null;
   let stats = null;
@@ -77,6 +80,7 @@
     ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
     rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
     showRivers:true,showLakes:true,showDeltas:true,showCities:true,showRoutes:true,showBorders:true,
+    editBorders:false,borderCountry:0,customTerritories:{},
     tectonics:56,erosion:28,season:50,customCities:[],cityNames:{}
   };
   const editHistory=window.PlanetForgeHistory?window.PlanetForgeHistory.create({
@@ -326,6 +330,7 @@
   const HEIGHT_STOPS = [[0,[8,25,51]],[.30,[17,55,88]],[.48,[40,117,137]],[.50,[52,117,108]],[.56,[88,142,90]],[.64,[143,157,91]],[.73,[166,129,88]],[.84,[137,105,92]],[.94,[178,184,177]],[1,[246,250,247]]];
   const TEMP_STOPS = [[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179,203,143]],[.64,[228,196,105]],[.8,[217,125,77]],[1,[151,55,62]]];
   const MOIST_STOPS = [[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
+  const TECTONIC_STOPS = [[0,[18,31,43]],[.08,[31,66,80]],[.22,[70,120,116]],[.45,[181,139,85]],[.7,[216,107,70]],[1,[239,70,63]]];
 
   function applyCustomCities(civ){
     civ.cities.forEach(city=>{const label=state.cityNames&&state.cityNames[String(city.id)];if(label)city.name=String(label).slice(0,48);});
@@ -341,8 +346,32 @@
     }
     return civ;
   }
-  function refreshCivilization(){if(!activeData)return;const civ=applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed));Object.assign(activeData,civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();scheduleAutosave();}
+  function applyCustomTerritories(civ,heightField,threshold){
+    const territories=civ.territories;
+    for(const [key,value] of Object.entries(state.customTerritories||{})){
+      const index=Number(key),country=Number(value);
+      if(Number.isInteger(index)&&index>=0&&index<territories.length&&country>=0&&country<civ.countryCount&&heightField[index]>threshold)territories[index]=country;
+    }
+    civ.borders=new Uint8Array(territories.length);
+    for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){
+      const i=y*MAP_W+x;if(heightField[i]<=threshold||territories[i]===255)continue;
+      const right=y*MAP_W+(x+1)%MAP_W,left=y*MAP_W+(x-1+MAP_W)%MAP_W;
+      const up=Math.max(0,y-1)*MAP_W+x,down=Math.min(MAP_H-1,y+1)*MAP_W+x,owner=territories[i];
+      if((heightField[right]>threshold&&territories[right]!==owner)||(heightField[left]>threshold&&territories[left]!==owner)||(heightField[up]>threshold&&territories[up]!==owner)||(heightField[down]>threshold&&territories[down]!==owner))civ.borders[i]=1;
+    }
+    return civ;
+  }
+  function updateBorderCountryOptions(civ){
+    const select=$("borderCountrySelect");
+    const capitals=(civ.cities||[]).filter(city=>city.type==="capital");
+    if(!capitals.length){select.innerHTML='<option value="0">Нет государств</option>';state.borderCountry=0;return;}
+    if(state.borderCountry>=civ.countryCount)state.borderCountry=0;
+    select.innerHTML=capitals.map(city=>'<option value="'+Number(city.countryId)+'">'+escapeHTML(city.name)+'</option>').join("");
+    select.value=String(state.borderCountry);
+  }
+  function refreshCivilization(){if(!activeData)return;const civ=applyCustomTerritories(applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed)),activeData.heightField,activeData.threshold);Object.assign(activeData,civ);updateBorderCountryOptions(civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();scheduleAutosave();}
   function editOrAddCity(event){
+    if(state.editBorders&&state.view==="map")return;
     if(!activeData)return;const point=pointerCoordinates(event);if(!point)return;
     const x=clamp(Math.floor((point.lon+180)/360*MAP_W),0,MAP_W-1),y=clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1),lat=90-((y+0.5)/MAP_H)*180;
     const near=(activeData.cities||[]).map(city=>{let dx=Math.abs(city.x-x);dx=Math.min(dx,MAP_W-dx)*Math.cos((lat+city.lat)*.5*Math.PI/180);const dy=city.y-y;return{city,distance:Math.sqrt(dx*dx+dy*dy)};}).sort((a,b)=>a.distance-b.distance)[0];
@@ -383,10 +412,12 @@
     const moisture = fields.moisture instanceof Float32Array ? fields.moisture : new Float32Array(fields.moisture);
     const biome = fields.biome instanceof Uint8Array ? fields.biome : new Uint8Array(fields.biome);
     const counts = fields.counts instanceof Uint32Array ? fields.counts : new Uint32Array(fields.counts);
+    const tectonicField = fields.tectonicField instanceof Float32Array ? fields.tectonicField : new Float32Array(fields.tectonicField || size);
     const threshold = fields.threshold, landCount = fields.landCount, totalTemp = fields.totalTemp;
     const seed = Number(fields.seed ?? state.seed) >>> 0;
     const riverData = generateRivers(height, threshold, seed);
-    const civilization = applyCustomCities(generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed));
+    const civilization = applyCustomTerritories(applyCustomCities(generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed)), height, threshold);
+    updateBorderCountryOptions(civilization);
     const meanTemp = totalTemp / size, landPercent = landCount / size * 100;
     const rand = seededRandom(seed);
     const radius = Math.round(3400 + rand() * 7300);
@@ -395,7 +426,7 @@
     const moons = Math.floor(rand() * 5);
     let uniqueBiomes = 0;
     for (let i = 0; i < counts.length; i++) if (counts[i] > size * 0.0001) uniqueBiomes++;
-    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, lakeMask:riverData.lakeMask, lakeCount:riverData.lakeCount, deltaMask:riverData.deltaMask, deltaCount:riverData.deltaCount, filledHeight:riverData.filledHeight, ...civilization, generatedMs: performance.now()-started };
+    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, tectonicField, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, lakeMask:riverData.lakeMask, lakeCount:riverData.lakeCount, deltaMask:riverData.deltaMask, deltaCount:riverData.deltaCount, filledHeight:riverData.filledHeight, ...civilization, generatedMs: performance.now()-started };
     stats = { ...activeData };
     drawTexture(); updateStats(); updateInterface(); renderCurrentView();
     $("resolutionLabel").textContent = "PROCEDURAL SURFACE · " + MAP_W + " × " + MAP_H;
@@ -464,7 +495,7 @@
   }
 
   function drawTexture() {
-    const { heightField, temperature, moisture, biome, threshold, riverMask, lakeMask, deltaMask, territories, borders } = activeData;
+    const { heightField, temperature, moisture, tectonicField, biome, threshold, riverMask, lakeMask, deltaMask, territories, borders } = activeData;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
@@ -478,6 +509,11 @@
         if (state.layer === "elevation") {
           const normalized = clamp((h - threshold + 0.18) / 0.46, 0, 1);
           color = hueColor(normalized, HEIGHT_STOPS);
+        } else if (state.layer === "heightmap") {
+          const gray = Math.round(clamp(h, 0, 1) * 255);
+          color = [gray, gray, gray];
+        } else if (state.layer === "tectonics") {
+          color = hueColor(tectonicField ? tectonicField[i] : 0, TECTONIC_STOPS);
         } else if (state.layer === "temperature") {
           color = hueColor((temperature[i] + 35) / 72, TEMP_STOPS);
         } else if (state.layer === "moisture") {
@@ -834,6 +870,10 @@
     $("rotationSwitch").classList.toggle("on", state.rotating);
     $("rotateBtn").setAttribute("aria-pressed", String(state.rotating));
     $("mapLayer").value = state.layer;
+    $("editBorders").checked = state.editBorders;
+    $("borderCountrySelect").value = String(state.borderCountry);
+    $("borderEditorHint").textContent = state.editBorders ? "Кисть активна: нажмите и ведите по суше на карте." : "Включите кисть и выберите государство, чтобы рисовать границы.";
+    mapCanvas.classList.toggle("painting", state.view === "map" && state.editBorders);
     $("showRivers").checked = state.showRivers;
     $("showLakes").checked = state.showLakes;
     $("showDeltas").checked = state.showDeltas;
@@ -852,6 +892,8 @@
       elevation: [['Глубины','#12375a'],['Низменность','#4e8d79'],['Возвышенность','#a28b67'],['Горы','#c5ccc7'],['Вершины','#f6faf7']],
       temperature: [['Холод','#1f407d'],['Прохладно','#7dbdb7'],['Умеренно','#b3cb8f'],['Жарко','#d97d4d'],['Экстремум','#97373e']],
       moisture: [['Засуха','#976b43'],['Сухо','#c29b5b'],['Умеренно','#afb869'],['Влажно','#369281'],['Очень влажно','#2e70a3']],
+      heightmap: [['Минимальная высота','#252525'],['Низина','#696969'],['Плато','#adadad'],['Горы','#e2e2e2']],
+      tectonics: [['Спокойная кора','#1f4250'],['Плиты','#467874'],['Сжатие','#b58b55'],['Активная граница','#ef463f']],
       hydrology: [['Океан','#12375a'],['Озёра','#2a7faa'],['Дельты','#58b6a0'],['Реки','#4bc9e5'],['Возвышенность','#a28b67']],
       political: [['Территория A','#378494'],['Территория B','#7767ac'],['Территория C','#a97943'],['Границы','#c4e1e3'],['Поселения','#a6ffe5']]
     };
@@ -876,6 +918,7 @@
   }
 
   function setView(view) {
+    if(view!=="map")state.editBorders=false;
     state.view = view;
     document.querySelectorAll(".view-tab").forEach((button) => {
       const active = button.dataset.view === view;
@@ -891,7 +934,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="heightmap"><span>HM</span><i><b>Heightmap PNG · 512 × 256</b><small>Grayscale высот для игрового движка</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
@@ -902,6 +945,7 @@
       if (type === "png") exportPNG(1);
       if (type === "png2k") exportNativePNG(4);
       if (type === "png4k") exportNativePNG(8);
+      if (type === "heightmap") exportHeightmapPNG();
       if (type === "json") exportJSON();
       if (type === "csv") exportCSV();
       if (type === "geo") exportGeographyCSV();
@@ -984,7 +1028,8 @@
       civilizationSeed: Number(state.civilizationSeed),
       customCities: state.customCities,
       cityNames: state.cityNames,
-      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders },
+      customTerritories: state.customTerritories,
+      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders, editBorders: state.editBorders, borderCountry: state.borderCountry },
       exportedAt: new Date().toISOString()
     };
   }
@@ -992,6 +1037,21 @@
     const blob = new Blob([JSON.stringify(projectJSON(), null, 2)], { type: "application/json;charset=utf-8" });
     downloadBlob(blob, cleanFileName(state.name) + ".planetforge.json");
     showToast("Проект сохранён в JSON");
+  }
+  function exportHeightmapPNG(){
+    if(!activeData)return;
+    const field=activeData.heightField,width=MAP_W,height=MAP_H,output=document.createElement("canvas");
+    output.width=width;output.height=height;
+    const context=output.getContext("2d",{alpha:false}),image=context.createImageData(width,height);
+    let min=Infinity,max=-Infinity;
+    for(const value of field){if(value<min)min=value;if(value>max)max=value;}
+    const threshold=activeData.threshold,below=Math.max(.000001,threshold-min),above=Math.max(.000001,max-threshold);
+    for(let i=0;i<field.length;i++){
+      const h=field[i],gray=h<=threshold?Math.round(clamp((h-min)/below,0,1)*127):128+Math.round(clamp((h-threshold)/above,0,1)*127),out=i*4;
+      image.data[out]=image.data[out+1]=image.data[out+2]=gray;image.data[out+3]=255;
+    }
+    context.putImageData(image,0,0);
+    output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(state.name)+"-heightmap.png");showToast("Heightmap PNG экспортирован · 512 × 256");}else showToast("Не удалось экспортировать heightmap");},"image/png");
   }
   function exportCSV() {
     const total = MAP_W * MAP_H;
@@ -1039,6 +1099,7 @@
     Object.assign(state, PRESETS[world.preset]);
     state.civilizationSeed = (world.seed ^ 0x51ed1234) >>> 0;
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     state.layer = "biome";
     state.view = "globe";
@@ -1133,9 +1194,18 @@
     state.erosion = clampInt(settings.erosion, 0, 100, 28);
     state.season = clampInt(settings.season, 0, 100, 50);
     state.customCities = Array.isArray(input.customCities) ? input.customCities.slice(0,100).filter(city=>city&&typeof city==="object").map((city,index)=>({id:String(city.id||index),name:String(city.name||"New Haven").slice(0,48),x:clampInt(city.x,0,MAP_W-1,0),y:clampInt(city.y,0,MAP_H-1,0)})) : [];
+    state.customTerritories = {};
+    if(input.customTerritories&&typeof input.customTerritories==="object"&&!Array.isArray(input.customTerritories)){
+      Object.entries(input.customTerritories).slice(0,MAP_W*MAP_H).forEach(([key,value])=>{
+        const index=Number(key),country=Number(value);
+        if(/^\d+$/.test(key)&&index>=0&&index<MAP_W*MAP_H&&Number.isInteger(country)&&country>=0&&country<6)state.customTerritories[key]=country;
+      });
+    }
+    state.editBorders = !!(input.view&&input.view.editBorders);
+    state.borderCountry = clampInt(input.view&&input.view.borderCountry,0,5,0);
     state.cityNames = {};
     if(input.cityNames&&typeof input.cityNames==="object"&&!Array.isArray(input.cityNames))Object.keys(input.cityNames).slice(0,100).forEach(key=>{if(/^\d+$/.test(key))state.cityNames[key]=String(input.cityNames[key]).slice(0,48);});
-    state.layer = input.view && ["biome", "elevation", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
+    state.layer = input.view && ["biome", "elevation", "heightmap", "tectonics", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
     state.zoom = input.view && Number.isFinite(input.view.zoom) ? clamp(input.view.zoom, .65, 1.55) : 1;
     state.showRivers = input.view && typeof input.view.showRivers === "boolean" ? input.view.showRivers : true;
     state.showLakes = input.view && typeof input.view.showLakes === "boolean" ? input.view.showLakes : true;
@@ -1186,6 +1256,7 @@
     state.seed = normalizeSeed($("seedInput").value);
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
@@ -1194,6 +1265,7 @@
     checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
@@ -1203,6 +1275,7 @@
     checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
@@ -1212,6 +1285,7 @@
   document.querySelectorAll(".preset-card").forEach((button) => button.addEventListener("click", () => {
     checkpointHistory();
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     state.preset = button.dataset.preset;
     Object.assign(state, PRESETS[state.preset]);
@@ -1237,6 +1311,14 @@
     updateInterface();
     if (activeData) { drawTexture(); renderCurrentView(); }
   });
+  $("editBorders").addEventListener("change",()=>{
+    checkpointHistory();state.editBorders=$("editBorders").checked;
+    if(state.editBorders)setView("map");else{updateInterface();renderCurrentView();}
+    showToast(state.editBorders?"Кисть границ включена":"Редактирование границ выключено");
+  });
+  $("borderCountrySelect").addEventListener("change",()=>{
+    state.borderCountry=clampInt($("borderCountrySelect").value,0,5,0);scheduleAutosave();
+  });
   [["showRivers", "showRivers"], ["showLakes", "showLakes"], ["showDeltas", "showDeltas"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
     $(id).addEventListener("change", () => {
       checkpointHistory();
@@ -1249,6 +1331,7 @@
     checkpointHistory();
     state.civilizationSeed = Math.floor(Math.random() * 2147483646) + 1;
     state.customCities = [];
+    state.customTerritories = {};
     state.cityNames = {};
     refreshCivilization();
     showToast("Цивилизации и торговые пути пересозданы");
@@ -1319,6 +1402,44 @@
     }
   });
 
+  function mapCellFromPoint(point){
+    return{x:((Math.floor((point.lon+180)/360*MAP_W)%MAP_W)+MAP_W)%MAP_W,y:clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1)};
+  }
+  function updatePaintedBorders(data,changed){
+    const affected=new Set(),heightField=data.heightField,territories=data.territories,borders=data.borders,threshold=data.threshold;
+    for(const index of changed){
+      const x=index%MAP_W,y=Math.floor(index/MAP_W);
+      affected.add(index);affected.add(y*MAP_W+(x+1)%MAP_W);affected.add(y*MAP_W+(x-1+MAP_W)%MAP_W);
+      affected.add(Math.max(0,y-1)*MAP_W+x);affected.add(Math.min(MAP_H-1,y+1)*MAP_W+x);
+    }
+    for(const index of affected){
+      if(heightField[index]<=threshold||territories[index]===255){borders[index]=0;continue;}
+      const x=index%MAP_W,y=Math.floor(index/MAP_W),owner=territories[index];
+      const right=y*MAP_W+(x+1)%MAP_W,left=y*MAP_W+(x-1+MAP_W)%MAP_W;
+      const up=Math.max(0,y-1)*MAP_W+x,down=Math.min(MAP_H-1,y+1)*MAP_W+x;
+      borders[index]=((heightField[right]>threshold&&territories[right]!==owner)||(heightField[left]>threshold&&territories[left]!==owner)||(heightField[up]>threshold&&territories[up]!==owner)||(heightField[down]>threshold&&territories[down]!==owner))?1:0;
+    }
+  }
+  function paintBorderSegment(start,end){
+    if(!activeData||!state.editBorders||state.view!=="map")return;
+    const country=clampInt(state.borderCountry,0,Math.max(0,activeData.countryCount-1),0),changed=new Set();
+    let dx=end.x-start.x;if(dx>MAP_W/2)dx-=MAP_W;else if(dx< -MAP_W/2)dx+=MAP_W;
+    const dy=end.y-start.y,steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))));
+    for(let step=0;step<=steps;step++){
+      const t=step/steps,cx=((Math.round(start.x+dx*t)%MAP_W)+MAP_W)%MAP_W,cy=clamp(Math.round(start.y+dy*t),0,MAP_H-1);
+      for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
+        if(ox*ox+oy*oy>5)continue;
+        const y=cy+oy;if(y<0||y>=MAP_H)continue;
+        const x=(cx+ox+MAP_W)%MAP_W,index=y*MAP_W+x;
+        if(activeData.heightField[index]<=activeData.threshold||activeData.territories[index]===country)continue;
+        activeData.territories[index]=country;state.customTerritories[String(index)]=country;changed.add(index);
+      }
+    }
+    if(changed.size){
+      updatePaintedBorders(activeData,changed);stats={...activeData};drawTexture();updateStats();renderCurrentView();
+      $("statusText").textContent="Ручная правка границ · "+Object.keys(state.customTerritories).length+" клеток";
+    }
+  }
   function pointerCoordinates(event) {
     const rect = (state.view === "globe" ? canvas : mapCanvas).getBoundingClientRect();
     if (state.view === "globe") {
@@ -1366,7 +1487,26 @@
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
   canvas.addEventListener("dblclick", editOrAddCity);
-  mapCanvas.addEventListener("pointermove", updateCoordinates);
+  mapCanvas.addEventListener("pointerdown", event=>{
+    if(!state.editBorders||state.view!=="map"||event.button!==0)return;
+    const point=pointerCoordinates(event);if(!point)return;
+    event.preventDefault();checkpointHistory();borderPaintPointer=event.pointerId;lastBorderPaintPoint=mapCellFromPoint(point);lastBorderPaintAt=performance.now();
+    mapCanvas.setPointerCapture(event.pointerId);paintBorderSegment(lastBorderPaintPoint,lastBorderPaintPoint);
+  });
+  mapCanvas.addEventListener("pointermove", event=>{
+    updateCoordinates(event);
+    if(borderPaintPointer!==event.pointerId||!state.editBorders)return;
+    const now=performance.now();if(now-lastBorderPaintAt<24)return;
+    const point=pointerCoordinates(event);if(!point)return;
+    const cell=mapCellFromPoint(point);if(lastBorderPaintPoint)paintBorderSegment(lastBorderPaintPoint,cell);
+    lastBorderPaintPoint=cell;lastBorderPaintAt=now;
+  });
+  const finishBorderPaint=event=>{
+    if(borderPaintPointer!==event.pointerId)return;
+    borderPaintPointer=null;lastBorderPaintPoint=null;scheduleAutosave();
+  };
+  mapCanvas.addEventListener("pointerup",finishBorderPaint);
+  mapCanvas.addEventListener("pointercancel",finishBorderPaint);
   mapCanvas.addEventListener("dblclick", editOrAddCity);
   planetStage.addEventListener("wheel", (event) => {
     if (state.view !== "globe") return;

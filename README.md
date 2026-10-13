@@ -9,17 +9,18 @@
 
 - **Procedural spherical worlds** generated from a deterministic seed using 3D value noise and fractal layers.
 - **Interactive globe** with rotation, drag-to-turn, zoom, surface lighting, and coordinate readout.
-- **Six cartography layers:** biome, elevation, temperature, moisture, procedural river networks, and political territories.
+- **Eight cartography layers:** biomes, elevation, grayscale heightmap, tectonic plate boundaries, temperature, moisture, hydrology, and political territories.
 - **WebGL globe renderer** with Canvas 2D fallback, lighting, ocean highlights, procedural clouds, and atmospheric rim lighting.
 - **Off-main-thread terrain generation** via Web Worker; stale slider generations are cancelled, and the deterministic main-thread generator remains as a fallback.
 - **Procedural geology:** seeded plate boundaries, adjustable tectonic activity, and terrain relaxation.
 - **Season control and terrain-aware moisture** change climate and biome distribution.
 - **Priority-flood drainage** to route rivers through closed depressions, visualize basin-fill lakes, and mark high-flow river deltas at shorelines.
 - **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
+- **Manual political borders:** turn on the border brush in map view, select a country, and paint land cells. Painted cells persist in project JSON, share links, auto-save, and undo/redo history.
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
 - **Curated world gallery:** six named example planets with fixed seeds and distinct presets; examples can be opened, edited, saved, and shared entirely offline.
-- **Native-resolution PNG export:** 512×256 for the current view, or 2048×1024 and 4096×2048 generated from the same seed and settings in a dedicated Worker. Terrain, climate, and biome detail are regenerated at the target resolution; river, political, city, and trade overlays are layered from the editor map. Geography can also be exported as CSV.
+- **Game asset export:** grayscale heightmap PNG, 512×256 current map, or 2048×1024 and 4096×2048 map layers generated from the same seed and settings in a dedicated Worker. Terrain, climate, and biome detail are regenerated at the target resolution; river, political, city, and trade overlays are layered from the editor map. Geography can also be exported as CSV.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
 - **Surface statistics:** land/water ratio, estimated mean temperature, biome distribution, river-channel cells, lake basins, delta cells, settlement count, and generated planetary properties.
@@ -79,6 +80,8 @@ PlanetForge/
 
 ## Technical notes
 
+- The editor uses local system fonts and a flat cartography-workstation style instead of downloading fonts from a third-party CDN.
+
 - Plain HTML, CSS, and JavaScript. Terrain fields are generated in a Web Worker when supported, with a deterministic synchronous fallback. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
 - A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
 - Latitude, elevation, orbital season, temperature, and terrain-aware moisture feed into the biome classifier.
@@ -89,12 +92,12 @@ PlanetForge/
 
 ## Controls
 
-- Drag the 3D globe to rotate it. Use the zoom buttons or mouse wheel to zoom.
+- Drag the 3D globe to rotate it. Its surface mesh is displaced from generated height values; clouds and atmosphere are rendered separately. Use the zoom buttons or mouse wheel to zoom.
 - Switch to **Карта мира** to inspect the equirectangular map.
-- Use **Слой карты** to change the displayed data, including river drainage and political territories.
-- Toggle rivers, settlements, trade routes, and state borders in the left panel. **Пересоздать цивилизации** changes the civilization layout without changing terrain.
+- Use **Слой карты** to change the displayed data, including grayscale heightmaps, tectonic plate boundaries, river drainage, and political territories.
+- Toggle rivers, lakes, deltas, settlements, trade routes, and state borders in the left panel. To paint state borders, switch to **Карта мира**, enable **Рисовать границы государств**, then choose a country and drag across land. **Пересоздать цивилизации** changes the civilization layout without changing terrain.
 - Choose a preset or tune controls; the surface regenerates automatically.
-- **Экспорт** opens PNG, JSON, and CSV export options.
+- **Экспорт** opens PNG, heightmap, JSON, and CSV export options. Select Heightmap or Tectonics under **Слой карты** before exporting 2K/4K maps.
 - **Импорт** loads a previously exported JSON project.
 
 ## License
