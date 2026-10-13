@@ -18,6 +18,9 @@
       </a>
       <div class="topbar-center"><span class="live-dot"></span><span id="statusText">Готов к созданию мира</span><span class="topbar-divider"></span><span class="mono" id="seedBadge">SEED 840271</span></div>
       <div class="topbar-actions">
+        <button class="icon-button history-button" id="undoBtn" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 7 7v1"/></svg></button>
+        <button class="icon-button history-button" id="redoBtn" title="Повторить (Ctrl+Y)" aria-label="Повторить" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0-7 7v1"/></svg></button>
+        <button class="icon-button" id="shareBtn" title="Скопировать ссылку на этот мир" aria-label="Поделиться миром"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4"/></svg></button>
         <button class="icon-button" id="savedWorldsBtn" title="Сохранённые миры" aria-label="Сохранённые миры"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg></button>
         <button class="button button-quiet" id="importBtn"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Импорт</span></button>
         <button class="button button-primary" id="exportBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Экспорт</span></button>
@@ -55,6 +58,12 @@
           <div class="slider-head slider-spaced"><label for="relief">Высота рельефа</label><output id="reliefOut">Средняя</output></div>
           <input type="range" id="relief" min="1" max="10" value="5" step="1">
           <div class="range-caption"><span>Равнины</span><span>Высокие горы</span></div>
+          <div class="slider-head slider-spaced"><label for="tectonics">Тектоническая активность</label><output id="tectonicsOut">56%</output></div>
+          <input type="range" id="tectonics" min="0" max="100" value="56" step="1">
+          <div class="range-caption"><span>Стабильная кора</span><span>Активные плиты</span></div>
+          <div class="slider-head slider-spaced"><label for="erosion">Сглаживание эрозией</label><output id="erosionOut">28%</output></div>
+          <input type="range" id="erosion" min="0" max="100" value="28" step="1">
+          <div class="range-caption"><span>Резкий рельеф</span><span>Мягкие формы</span></div>
         </section>
 
         <section class="control-section">
@@ -65,6 +74,9 @@
           <div class="slider-head slider-spaced"><label for="humidity">Влажность атмосферы</label><output id="humidityOut">50%</output></div>
           <input type="range" id="humidity" min="0" max="100" value="50" step="1">
           <div class="range-caption"><span>Засушливая</span><span>Влажная</span></div>
+          <div class="slider-head slider-spaced"><label for="season">Сезон орбиты</label><output id="seasonOut">Равноденствие</output></div>
+          <input type="range" id="season" min="0" max="100" value="50" step="1">
+          <div class="range-caption"><span>Северная зима</span><span>Северное лето</span></div>
         </section>
 
         <section class="control-section">
@@ -94,6 +106,7 @@
         </div>
         <div class="planet-stage" id="planetStage">
           <div class="space-grid" aria-hidden="true"></div>
+          <canvas id="globe3dCanvas" aria-hidden="true"></canvas>
           <canvas id="planetCanvas" aria-label="Интерактивный процедурный глобус"></canvas>
           <canvas id="mapCanvas" aria-label="Процедурная карта мира" hidden></canvas>
           <div class="stage-top-left"><span class="tiny-live-dot"></span><span id="viewModeLabel">PLANET VIEW / 3D RENDER</span></div>
@@ -107,7 +120,7 @@
           <div class="legend" id="mapLegend"><span><i class="legend-color ocean"></i>Океан</span><span><i class="legend-color forest"></i>Леса</span><span><i class="legend-color desert"></i>Пустыни</span><span><i class="legend-color mountain"></i>Горы</span><span><i class="legend-color ice"></i>Лёд</span></div>
           <button class="text-action" id="regenerateBtn"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4.8 9A7 7 0 0 1 17 6.2L20 12M4 17v-5h5m10.2 3A7 7 0 0 1 7 17.8L4 12"/></svg>Перегенерировать <span>↗</span></button>
         </div>
-        <div class="mobile-controls-note">Настройки доступны в панели конструктора.</div>
+        <div class="mobile-controls-note">Настройки доступны в панели конструктора. Дважды щёлкните по суше на глобусе или карте, чтобы добавить поселение; двойной щелчок по существующему городу позволяет переименовать его.</div>
       </section>
 
       <aside class="sidebar right-sidebar">
@@ -151,6 +164,9 @@
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <input type="file" id="importFile" accept=".json,application/json" hidden>
+  <script src="assets/js/history.js" defer></script>
+  <script src="assets/js/share.js" defer></script>
+  <script src="assets/js/globe3d.js" defer></script>
   <script src="assets/js/app.js" defer></script>
 </body>
 </html>

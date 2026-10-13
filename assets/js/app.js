@@ -20,17 +20,20 @@
     { name: "Тайга", color: [58, 111, 105] }
   ];
   const PRESETS = {
-    temperate: { seaLevel: 50, landmass: 0, relief: 5, temperature: 0, humidity: 50 },
-    archipelago: { seaLevel: 55, landmass: -3, relief: 3, temperature: 6, humidity: 61 },
-    desert: { seaLevel: 48, landmass: 2, relief: 5, temperature: 24, humidity: 12 },
-    ice: { seaLevel: 52, landmass: -1, relief: 5, temperature: -29, humidity: 63 },
-    alien: { seaLevel: 46, landmass: 8, relief: 8, temperature: 12, humidity: 83 },
-    volcanic: { seaLevel: 50, landmass: 3, relief: 10, temperature: 9, humidity: 30 }
+    temperate:{seaLevel:50,landmass:0,relief:5,temperature:0,humidity:50,tectonics:56,erosion:28,season:50},
+    archipelago:{seaLevel:55,landmass:-3,relief:3,temperature:6,humidity:61,tectonics:68,erosion:35,season:50},
+    desert:{seaLevel:48,landmass:2,relief:5,temperature:24,humidity:12,tectonics:45,erosion:18,season:50},
+    ice:{seaLevel:52,landmass:-1,relief:5,temperature:-29,humidity:63,tectonics:37,erosion:42,season:50},
+    alien:{seaLevel:46,landmass:8,relief:8,temperature:12,humidity:83,tectonics:81,erosion:25,season:50},
+    volcanic:{seaLevel:50,landmass:3,relief:10,temperature:9,humidity:30,tectonics:94,erosion:16,season:50}
   };
   const DEFAULTS = { name: "Aurelia", seed: 840271, ...PRESETS.temperate, preset: "temperate" };
   const $ = (id) => document.getElementById(id);
   const canvas = $("planetCanvas");
+  const glCanvas = $("globe3dCanvas");
   const mapCanvas = $("mapCanvas");
+  const globe3D = window.PlanetForgeGlobe3D ? window.PlanetForgeGlobe3D.create(glCanvas) : null;
+  if (!globe3D || !globe3D.ready) glCanvas.hidden = true;
   const planetStage = $("planetStage");
   const ctx = canvas.getContext("2d", { alpha: true });
   const mapCtx = mapCanvas.getContext("2d", { alpha: false });
@@ -43,6 +46,7 @@
   let globeBuffer = null;
   let globeBufferSize = 0;
   let mapData = null;
+  let textureRevision = 0;
   let resizeObserver = null;
   let regenTimer = 0;
   let animationId = 0;
@@ -55,19 +59,16 @@
   let stats = null;
 
   const state = {
-    ...DEFAULTS,
-    view: "globe",
-    layer: "biome",
-    rotation: 0,
-    zoom: 1,
-    rotating: true,
-    isGenerating: false,
-    civilizationSeed: (DEFAULTS.seed ^ 0x51ed1234) >>> 0,
-    showRivers: true,
-    showCities: true,
-    showRoutes: true,
-    showBorders: true
+    ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
+    rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
+    showRivers:true,showCities:true,showRoutes:true,showBorders:true,
+    tectonics:56,erosion:28,season:50,customCities:[],cityNames:{}
   };
+  const editHistory=window.PlanetForgeHistory?window.PlanetForgeHistory.create({
+    capture:projectJSON,restore:restoreProject,onChange:updateHistoryButtons,limit:70
+  }):null;
+  function checkpointHistory(){if(editHistory)editHistory.checkpoint();}
+  function updateHistoryButtons(){const current=editHistory?editHistory.state():{canUndo:false,canRedo:false};$("undoBtn").disabled=!current.canUndo;$("redoBtn").disabled=!current.canRedo;}
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -111,56 +112,21 @@
     [73, 142, 105], [170, 88, 103], [76, 119, 173]
   ];
 
-  function generateRivers(height, threshold, seed) {
-    const size = height.length;
-    const downstream = new Int32Array(size);
-    downstream.fill(-1);
-    const accumulation = new Uint32Array(size);
-    const landCells = [];
-    for (let i = 0; i < size; i++) {
-      if (height[i] > threshold) {
-        accumulation[i] = 1;
-        landCells.push(i);
-      }
+  function generateRivers(height,threshold,seed){
+    const size=height.length,downstream=new Int32Array(size),accumulation=new Uint32Array(size);downstream.fill(-1);
+    const visited=new Uint8Array(size),filled=new Float32Array(height),landCells=[],heapIndex=[],heapLevel=[];
+    function push(index,level){let i=heapIndex.length;heapIndex.push(index);heapLevel.push(level);while(i>0){const parent=(i-1)>>1;if(heapLevel[parent]<=level)break;heapIndex[i]=heapIndex[parent];heapLevel[i]=heapLevel[parent];i=parent;}heapIndex[i]=index;heapLevel[i]=level;}
+    function pop(){const result={index:heapIndex[0],level:heapLevel[0]},lastIndex=heapIndex.pop(),lastLevel=heapLevel.pop();if(heapIndex.length){let i=0;while(true){let child=i*2+1;if(child>=heapIndex.length)break;if(child+1<heapIndex.length&&heapLevel[child+1]<heapLevel[child])child++;if(heapLevel[child]>=lastLevel)break;heapIndex[i]=heapIndex[child];heapLevel[i]=heapLevel[child];i=child;}heapIndex[i]=lastIndex;heapLevel[i]=lastLevel;}return result;}
+    for(let i=0;i<size;i++){if(height[i]<=threshold){visited[i]=1;push(i,height[i]);}else{landCells.push(i);accumulation[i]=1;}}
+    // Priority-flood drainage resolves closed depressions and directs each land
+    // cell toward a sea-level cell instead of allowing rivers to stop in pits.
+    while(heapIndex.length){const node=pop(),x=node.index%MAP_W,y=Math.floor(node.index/MAP_W);
+      for(let dy=-1;dy<=1;dy++){const ny=y+dy;if(ny<0||ny>=MAP_H)continue;for(let dx=-1;dx<=1;dx++){if(dx===0&&dy===0)continue;const nx=(x+dx+MAP_W)%MAP_W,next=ny*MAP_W+nx;if(visited[next])continue;visited[next]=1;const spill=Math.max(height[next],node.level+0.000001);filled[next]=spill;downstream[next]=node.index;push(next,spill);}}
     }
-
-    // High cells are processed first, so upstream flow reaches lowlands in order.
-    // Longitude wraps at the map seam; this avoids an artificial edge in the drainage.
-    landCells.sort((a, b) => height[b] - height[a]);
-    for (const index of landCells) {
-      const x = index % MAP_W, y = Math.floor(index / MAP_W);
-      const currentHeight = height[index];
-      let lowestHeight = currentHeight - 0.00015, next = -1;
-      for (let dy = -1; dy <= 1; dy++) {
-        const ny = y + dy;
-        if (ny < 0 || ny >= MAP_H) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const nx = (x + dx + MAP_W) % MAP_W;
-          const candidate = ny * MAP_W + nx;
-          if (height[candidate] < lowestHeight) {
-            lowestHeight = height[candidate];
-            next = candidate;
-          }
-        }
-      }
-      downstream[index] = next;
-    }
-
-    for (const index of landCells) {
-      const next = downstream[index];
-      if (next >= 0) accumulation[next] += accumulation[index];
-    }
-    const mask = new Uint8Array(size);
-    const cutoff = Math.max(22, Math.round(landCells.length / 1500));
-    let count = 0;
-    for (const index of landCells) {
-      if (accumulation[index] >= cutoff && downstream[index] >= 0) {
-        mask[index] = 1;
-        count++;
-      }
-    }
-    return { mask, count };
+    const order=landCells.slice().sort((a,b)=>filled[b]-filled[a]);for(const index of order){const next=downstream[index];if(next>=0)accumulation[next]+=accumulation[index];}
+    const mask=new Uint8Array(size),cutoff=Math.max(18,Math.round(landCells.length/1800));let count=0;
+    for(const index of landCells)if(accumulation[index]>=cutoff&&downstream[index]>=0){mask[index]=1;count++;}
+    return{mask,count,filledHeight:filled};
   }
 
   function generateCivilization(height, temperature, moisture, biome, riverMask, threshold, landCount, civilizationSeed) {
@@ -314,6 +280,38 @@
   const TEMP_STOPS = [[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179,203,143]],[.64,[228,196,105]],[.8,[217,125,77]],[1,[151,55,62]]];
   const MOIST_STOPS = [[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
 
+  function applyCustomCities(civ){
+    civ.cities.forEach(city=>{const label=state.cityNames&&state.cityNames[String(city.id)];if(label)city.name=String(label).slice(0,48);});
+    const capitals=civ.cities.filter(city=>city.type==="capital"),routes=civ.routes,routeKeys=new Set(routes.map(r=>[String(r.from),String(r.to)].sort().join(":")));
+    const d2=(a,b)=>{let dx=Math.abs(a.x-b.x);dx=Math.min(dx,MAP_W-dx)*Math.cos((a.lat+b.lat)*0.5*Math.PI/180);const dy=a.y-b.y;return dx*dx+dy*dy;};
+    for(const item of(state.customCities||[]).slice(0,100)){
+      const x=clampInt(item.x,0,MAP_W-1,0),y=clampInt(item.y,0,MAP_H-1,0),lat=90-((y+0.5)/MAP_H)*180,lon=((x+0.5)/MAP_W)*360-180;
+      let countryId=capitals.length?capitals[0].countryId:0,best=-Infinity;
+      for(const capital of capitals){const a=lat*Math.PI/180,b=lon*Math.PI/180,c=capital.lat*Math.PI/180,d=capital.lon*Math.PI/180;const dot=Math.sin(a)*Math.sin(c)+Math.cos(a)*Math.cos(c)*Math.cos(b-d);if(dot>best){best=dot;countryId=capital.countryId;}}
+      const city={id:"user-"+String(item.id),customKey:String(item.id),custom:true,name:String(item.name||"New Haven").slice(0,48),x,y,lat,lon,type:"city",countryId,population:0};civ.cities.push(city);
+      const nearest=civ.cities.filter(other=>other.id!==city.id&&other.countryId===countryId).map(other=>({other,distance:d2(city,other)})).sort((a,b)=>a.distance-b.distance).slice(0,2);
+      for(const entry of nearest){const key=[String(city.id),String(entry.other.id)].sort().join(":");if(routeKeys.has(key))continue;routeKeys.add(key);routes.push({from:city.id,to:entry.other.id,countryId});}
+    }
+    return civ;
+  }
+  function refreshCivilization(){if(!activeData)return;const civ=applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed));Object.assign(activeData,civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();}
+  function editOrAddCity(event){
+    if(!activeData)return;const point=pointerCoordinates(event);if(!point)return;
+    const x=clamp(Math.floor((point.lon+180)/360*MAP_W),0,MAP_W-1),y=clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1),lat=90-((y+0.5)/MAP_H)*180;
+    const near=(activeData.cities||[]).map(city=>{let dx=Math.abs(city.x-x);dx=Math.min(dx,MAP_W-dx)*Math.cos((lat+city.lat)*.5*Math.PI/180);const dy=city.y-y;return{city,distance:Math.sqrt(dx*dx+dy*dy)};}).sort((a,b)=>a.distance-b.distance)[0];
+    if(near&&near.distance<Math.max(7,13/state.zoom)){
+      const answer=window.prompt("Новое название для «"+near.city.name+"». Для пользовательского поселения введите DELETE, чтобы удалить.",near.city.name);
+      if(answer===null||!answer.trim())return;
+      if(answer.trim().toUpperCase()==="DELETE"&&near.city.custom){checkpointHistory();state.customCities=state.customCities.filter(item=>String(item.id)!==String(near.city.customKey));refreshCivilization();showToast("Пользовательское поселение удалено");return;}
+      checkpointHistory();const name=answer.trim().slice(0,48);
+      if(near.city.custom){const item=state.customCities.find(row=>String(row.id)===String(near.city.customKey));if(item)item.name=name;}else state.cityNames[String(near.city.id)]=name;
+      refreshCivilization();showToast("Поселение переименовано");return;
+    }
+    if(activeData.heightField[y*MAP_W+x]<=activeData.threshold){showToast("Города можно размещать только на суше");return;}
+    const name=window.prompt("Название нового поселения","New Haven");if(name===null||!name.trim())return;
+    checkpointHistory();state.customCities.push({id:String(Date.now())+"-"+String(Math.floor(Math.random()*100000)),name:name.trim().slice(0,48),x,y});refreshCivilization();showToast("Поселение добавлено на карту");
+  }
+
   function generatePlanet() {
     const started = performance.now();
     const seed = Number(state.seed) >>> 0;
@@ -322,64 +320,41 @@
     const temperature = new Float32Array(size);
     const moisture = new Float32Array(size);
     const biome = new Uint8Array(size);
-    const tempOffset = Number(state.temperature);
-    const humidity = Number(state.humidity) / 100;
-    const relief = Number(state.relief);
-    const threshold = 0.535 + (Number(state.seaLevel) - 50) * 0.0042 - Number(state.landmass) * 0.0045;
-    let landCount = 0, totalTemp = 0;
-    const counts = new Uint32Array(BIOMES.length);
-    for (let y = 0; y < MAP_H; y++) {
-      const lat = Math.PI / 2 - ((y + 0.5) / MAP_H) * Math.PI;
-      const latSin = Math.sin(lat);
-      const latCos = Math.cos(lat);
-      const absLat = Math.abs(lat * 180 / Math.PI);
-      for (let x = 0; x < MAP_W; x++) {
-        const lon = ((x + 0.5) / MAP_W) * TAU - Math.PI;
-        const sx = latCos * Math.cos(lon);
-        const sy = latSin;
-        const sz = latCos * Math.sin(lon);
-        const continent = fbm3(sx, sy, sz, 2.25, 3, seed + 11);
-        const detail = fbm3(sx, sy, sz, 6.6, 2, seed + 271);
-        const fine = noise3(sx * 13.1, sy * 13.1, sz * 13.1, seed + 701);
-        const h = continent * 0.68 + detail * 0.24 + fine * 0.08;
-        const idx = y * MAP_W + x;
-        height[idx] = h;
-        const alt = h - threshold;
-        const t = 30 - absLat * 0.48 + tempOffset - Math.max(0, alt) * 130;
-        const rain = fbm3(sx, sy, sz, 4.7, 2, seed + 1907);
-        const wet = clamp(humidity * 0.60 + rain * 0.25 + (1 - Math.abs(latSin)) * 0.15, 0, 1);
-        temperature[idx] = t;
-        moisture[idx] = wet;
-        totalTemp += t;
-        let b;
-        if (h <= threshold) {
-          b = t < -8 ? 2 : (h > threshold - 0.035 ? 1 : 0);
-        } else if (t < -16) {
-          b = 3;
-        } else if (t < -1) {
-          b = 4;
-        } else if (alt > 0.135 - relief * 0.0085) {
-          b = 5;
-        } else if (wet < 0.22 && t > 7) {
-          b = 6;
-        } else if (t < 7 && wet > 0.40) {
-          b = 11;
-        } else if (wet < 0.38 && t > 16) {
-          b = 7;
-        } else if (wet > 0.78 && t > 17) {
-          b = 10;
-        } else if (wet > 0.51 && t > 4) {
-          b = 9;
-        } else {
-          b = 8;
-        }
-        biome[idx] = b;
-        counts[b]++;
-        if (h > threshold) landCount++;
+    const tempOffset=Number(state.temperature),humidity=Number(state.humidity)/100,relief=Number(state.relief);
+    const tectonics=Number(state.tectonics)/100,erosion=Number(state.erosion)/100,seasonPhase=Number(state.season)/100*TAU;
+    const threshold=0.535+(Number(state.seaLevel)-50)*0.0042-Number(state.landmass)*0.0045;
+    let landCount=0,totalTemp=0;const counts=new Uint32Array(BIOMES.length);
+    const plateRandom=seededRandom(seed^0x6a09e667);
+    const plates=Array.from({length:14},()=>{const lat=Math.asin(plateRandom()*2-1),lon=plateRandom()*TAU-Math.PI;return{x:Math.cos(lat)*Math.cos(lon),y:Math.sin(lat),z:Math.cos(lat)*Math.sin(lon),continental:plateRandom()>.46,mode:Math.floor(plateRandom()*3)};});
+    for(let y=0;y<MAP_H;y++){const lat=Math.PI/2-((y+.5)/MAP_H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat);
+      for(let x=0;x<MAP_W;x++){const lon=((x+.5)/MAP_W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon);
+        const continent=fbm3(sx,sy,sz,2.25,3,seed+11),detail=fbm3(sx,sy,sz,6.6,2,seed+271),fine=noise3(sx*13.1,sy*13.1,sz*13.1,seed+701);
+        let best=-Infinity,second=-Infinity,bestIndex=0,secondIndex=0;
+        for(let p=0;p<plates.length;p++){const plate=plates[p],dot=sx*plate.x+sy*plate.y+sz*plate.z;if(dot>best){second=best;secondIndex=bestIndex;best=dot;bestIndex=p;}else if(dot>second){second=dot;secondIndex=p;}}
+        const boundary=clamp(1-(best-second)*26,0,1),primary=plates[bestIndex],neighbour=plates[secondIndex];
+        let stress;if(primary.continental&&neighbour.continental)stress=.085;else if(primary.continental!==neighbour.continental)stress=primary.continental?.052:-.045;else stress=primary.mode===0?.058:primary.mode===1?-.047:.008;
+        height[y*MAP_W+x]=continent*.68+detail*.24+fine*.08+boundary*stress*tectonics;
+      }
+    }
+    if(erosion>.001){let source=height,target=new Float32Array(size);const blend=erosion*.15;
+      for(let pass=0;pass<2;pass++){for(let y=0;y<MAP_H;y++){const up=Math.max(0,y-1)*MAP_W,down=Math.min(MAP_H-1,y+1)*MAP_W,row=y*MAP_W;
+        for(let x=0;x<MAP_W;x++){const left=row+(x-1+MAP_W)%MAP_W,right=row+(x+1)%MAP_W,i=row+x,avg=(source[left]+source[right]+source[up+x]+source[down+x])*.25;target[i]=lerp(source[i],avg,blend);}}
+        const swap=source;source=target;target=swap;
+      }height.set(source);
+    }
+    for(let y=0;y<MAP_H;y++){const lat=Math.PI/2-((y+.5)/MAP_H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat),absLat=Math.abs(lat*180/Math.PI);
+      for(let x=0;x<MAP_W;x++){const lon=((x+.5)/MAP_W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon),idx=y*MAP_W+x;
+        const h=height[idx],alt=h-threshold,seasonal=Math.sin(seasonPhase)*Math.sin(lat)*12;
+        const t=30-absLat*.48+tempOffset+seasonal-Math.max(0,alt)*130,rain=fbm3(sx,sy,sz,4.7,2,seed+1907);
+        const east=height[y*MAP_W+(x+2)%MAP_W],west=height[y*MAP_W+(x-2+MAP_W)%MAP_W],windward=clamp(.5+(east-west)*1.8,0,1);
+        const wet=clamp(humidity*.58+rain*.25+(1-Math.abs(latSin))*.15+windward*.12-Math.max(0,alt)*.18,0,1);
+        temperature[idx]=t;moisture[idx]=wet;totalTemp+=t;
+        let b;if(h<=threshold)b=t<-8?2:(h>threshold-.035?1:0);else if(t<-16)b=3;else if(t<-1)b=4;else if(alt>.135-relief*.0085)b=5;else if(wet<.22&&t>7)b=6;else if(t<7&&wet>.40)b=11;else if(wet<.38&&t>16)b=7;else if(wet>.78&&t>17)b=10;else if(wet>.51&&t>4)b=9;else b=8;
+        biome[idx]=b;counts[b]++;if(h>threshold)landCount++;
       }
     }
     const riverData = generateRivers(height, threshold, seed);
-    const civilization = generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed);
+    const civilization = applyCustomCities(generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed));
     const meanTemp = totalTemp / size;
     const landPercent = landCount / size * 100;
     const rand = seededRandom(seed);
@@ -400,6 +375,7 @@
     $("statusText").textContent = "Мир сформирован · " + state.name;
     $("renderOverlay").classList.add("hidden");
     state.isGenerating = false;
+    $("perfReadout").textContent = (globe3D && globe3D.ready ? "WEBGL GLOBE · " : "CANVAS FALLBACK · ") + Math.round(activeData.generatedMs) + " MS";
     startAnimation();
   }
 
@@ -453,6 +429,7 @@
       }
     }
     textureCtx.putImageData(textureImage, 0, 0);
+    textureRevision++;
     mapData = texturePixels;
   }
 
@@ -479,6 +456,10 @@
     const cy = h * 0.51;
     const baseRadius = Math.min(w, h) * 0.355;
     const radius = Math.max(35, Math.min(Math.min(w, h) * 0.46, baseRadius * state.zoom));
+    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, radius, w, h, cy, Number(state.seed))) {
+      drawCivilizationGlobe(cx, cy, radius);
+      return;
+    }
     const glow = ctx.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius * 1.25);
     glow.addColorStop(0, "rgba(38,123,142,.13)");
     glow.addColorStop(.72, "rgba(29,94,132,.075)");
@@ -677,10 +658,12 @@
   function renderCurrentView() {
     if (state.view === "globe") {
       canvas.hidden = false;
+      glCanvas.hidden = !globe3D || !globe3D.ready;
       mapCanvas.hidden = true;
       drawGlobe();
     } else {
       canvas.hidden = true;
+      glCanvas.hidden = true;
       mapCanvas.hidden = false;
       drawMap();
     }
@@ -744,11 +727,17 @@
     $("relief").value = state.relief;
     $("temperature").value = state.temperature;
     $("humidity").value = state.humidity;
+    $("tectonics").value = state.tectonics;
+    $("erosion").value = state.erosion;
+    $("season").value = state.season;
     $("seaLevelOut").textContent = state.seaLevel + "%";
     $("landmassOut").textContent = (state.landmass > 0 ? "+" : "") + state.landmass;
     $("reliefOut").textContent = ["", "Низкая", "Низкая", "Низкая", "Средняя", "Средняя", "Средняя", "Высокая", "Высокая", "Горная", "Горная"][state.relief] || "Средняя";
     $("temperatureOut").textContent = (state.temperature > 0 ? "+" : "") + state.temperature + " °C";
     $("humidityOut").textContent = state.humidity + "%";
+    $("tectonicsOut").textContent = state.tectonics + "%";
+    $("erosionOut").textContent = state.erosion + "%";
+    $("seasonOut").textContent = state.season < 25 ? "Северная зима" : state.season < 50 ? "Весенний переход" : state.season < 75 ? "Северное лето" : "Осенний переход";
     document.querySelectorAll('input[type="range"]').forEach((input) => {
       const min = Number(input.min), max = Number(input.max), val = Number(input.value);
       input.style.setProperty("--range-fill", ((val - min) / (max - min) * 100) + "%");
@@ -811,7 +800,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта мира</b><small>Текущее отображение · 512 × 256</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Seed и все настройки</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG-карта · 2048 × 1024</b><small>Высокое разрешение</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG-карта · 4096 × 2048</b><small>Для игровых текстур</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
@@ -819,9 +808,12 @@
       if (!button) return;
       const type = button.dataset.export;
       exportMenu.remove(); exportMenu = null;
-      if (type === "png") exportPNG();
+      if (type === "png") exportPNG(1);
+      if (type === "png2k") exportPNG(4);
+      if (type === "png4k") exportPNG(8);
       if (type === "json") exportJSON();
       if (type === "csv") exportCSV();
+      if (type === "geo") exportGeographyCSV();
     });
     document.addEventListener("pointerdown", closeExportOnOutside, { once: true });
   }
@@ -841,54 +833,32 @@
   function cleanFileName(name) {
     return (name || "planet").normalize("NFKD").replace(/[^a-zA-Z0-9а-яА-Я_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "planet";
   }
-  function exportPNG() {
-    if (!activeData) return;
-    const output = document.createElement("canvas");
-    output.width = MAP_W; output.height = MAP_H;
-    const outputCtx = output.getContext("2d");
-    outputCtx.drawImage(textureCanvas, 0, 0);
-    const cityPoints = new Map((activeData.cities || []).map((city) => [city.id, { x: city.x + 0.5, y: city.y + 0.5, city }]));
-    if (state.showRoutes) {
-      outputCtx.strokeStyle = "rgba(103,224,211,.9)";
-      outputCtx.lineWidth = 1.1;
-      outputCtx.setLineDash([2.6, 2.2]);
-      outputCtx.beginPath();
-      for (const route of activeData.routes || []) {
-        const a = cityPoints.get(route.from), b = cityPoints.get(route.to);
-        if (!a || !b || Math.abs(a.x - b.x) > MAP_W / 2) continue;
-        outputCtx.moveTo(a.x, a.y); outputCtx.lineTo(b.x, b.y);
-      }
-      outputCtx.stroke(); outputCtx.setLineDash([]);
-    }
-    if (state.showCities) {
-      for (const point of cityPoints.values()) {
-        const city = point.city, capital = city.type === "capital";
-        outputCtx.beginPath();
-        outputCtx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
-        outputCtx.arc(point.x, point.y, capital ? 2.2 : city.type === "city" ? 1.7 : 1.1, 0, TAU);
-        outputCtx.fill();
-        if (capital || city.type === "city") {
-          outputCtx.font = "6px ui-monospace, monospace";
-          outputCtx.lineWidth = 1.7; outputCtx.strokeStyle = "rgba(4,12,22,.92)";
-          outputCtx.strokeText(city.name, point.x + 3, point.y - 2.5);
-          outputCtx.fillStyle = "#e2f5ff"; outputCtx.fillText(city.name, point.x + 3, point.y - 2.5);
-        }
-      }
-    }
-    output.toBlob((blob) => {
-      if (blob) { downloadBlob(blob, cleanFileName(state.name) + "-" + state.layer + ".png"); showToast("PNG-карта экспортирована"); }
-      else showToast("Не удалось экспортировать PNG");
-    }, "image/png");
+  function exportPNG(scale=1){
+    if(!activeData)return;scale=[1,4,8].includes(Number(scale))?Number(scale):1;
+    const output=document.createElement("canvas");output.width=MAP_W*scale;output.height=MAP_H*scale;
+    const out=output.getContext("2d");out.drawImage(textureCanvas,0,0,output.width,output.height);
+    const points=new Map((activeData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
+    if(state.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of activeData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
+    if(state.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
+    output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(state.name)+"-"+scale+"x-"+state.layer+".png");showToast("PNG экспортирован: "+output.width+" × "+output.height);}else showToast("Не удалось экспортировать PNG");},"image/png");
+  }
+  function exportGeographyCSV(){
+    if(!activeData)return;const lines=["record_type,id,name,latitude,longitude,country_id,from_id,to_id,population"];
+    for(const city of activeData.cities||[])lines.push(["city",city.id,'"'+String(city.name).replace(/"/g,'""')+'"',city.lat.toFixed(5),city.lon.toFixed(5),city.countryId,"","",city.population||0].join(","));
+    for(const route of activeData.routes||[])lines.push(["trade_route","","","","",route.countryId,route.from,route.to,""].join(","));
+    downloadBlob(new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}),cleanFileName(state.name)+"-geography.csv");showToast("География экспортирована в CSV");
   }
   function projectJSON() {
     return {
       format: "planetforge-world",
-      version: 1,
+      version: 2,
       name: state.name,
       seed: Number(state.seed),
       preset: state.preset,
-      settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity },
+      settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity, tectonics: state.tectonics, erosion: state.erosion, season: state.season },
       civilizationSeed: Number(state.civilizationSeed),
+      customCities: state.customCities,
+      cityNames: state.cityNames,
       view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders },
       exportedAt: new Date().toISOString()
     };
@@ -913,7 +883,7 @@
     } catch (_) { return []; }
   }
   function saveWorld() {
-    const world = { id: String(Date.now()) + "-" + String(Math.floor(Math.random() * 100000)), name: state.name || "Безымянный мир", seed: Number(state.seed), civilizationSeed: Number(state.civilizationSeed), preset: state.preset, settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity }, view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders }, savedAt: new Date().toISOString(), stats: stats ? { landPercent: Number(stats.landPercent.toFixed(2)), meanTemp: Number(stats.meanTemp.toFixed(1)), uniqueBiomes: stats.uniqueBiomes } : null };
+    const world = { id: String(Date.now()) + "-" + String(Math.floor(Math.random() * 100000)), ...projectJSON(), savedAt: new Date().toISOString(), stats: stats ? { landPercent: Number(stats.landPercent.toFixed(2)), meanTemp: Number(stats.meanTemp.toFixed(1)), uniqueBiomes: stats.uniqueBiomes } : null };
     const worlds = readSavedWorlds().filter((item) => item.seed !== world.seed || item.name !== world.name);
     worlds.unshift(world);
     try {
@@ -963,6 +933,12 @@
     state.relief = clampInt(settings.relief, 1, 10, 5);
     state.temperature = clampInt(settings.temperature, -40, 40, 0);
     state.humidity = clampInt(settings.humidity, 0, 100, 50);
+    state.tectonics = clampInt(settings.tectonics, 0, 100, 56);
+    state.erosion = clampInt(settings.erosion, 0, 100, 28);
+    state.season = clampInt(settings.season, 0, 100, 50);
+    state.customCities = Array.isArray(input.customCities) ? input.customCities.slice(0,100).filter(city=>city&&typeof city==="object").map((city,index)=>({id:String(city.id||index),name:String(city.name||"New Haven").slice(0,48),x:clampInt(city.x,0,MAP_W-1,0),y:clampInt(city.y,0,MAP_H-1,0)})) : [];
+    state.cityNames = {};
+    if(input.cityNames&&typeof input.cityNames==="object"&&!Array.isArray(input.cityNames))Object.keys(input.cityNames).slice(0,100).forEach(key=>{if(/^\d+$/.test(key))state.cityNames[key]=String(input.cityNames[key]).slice(0,48);});
     state.layer = input.view && ["biome", "elevation", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
     state.zoom = input.view && Number.isFinite(input.view.zoom) ? clamp(input.view.zoom, .65, 1.55) : 1;
     state.showRivers = input.view && typeof input.view.showRivers === "boolean" ? input.view.showRivers : true;
@@ -1000,31 +976,44 @@
     return whole + "° " + String(minutes).padStart(2, "0") + "' " + side;
   }
 
+  $("planetName").addEventListener("focus", checkpointHistory);
   $("planetName").addEventListener("input", () => {
     state.name = $("planetName").value.slice(0, 48);
     $("statsPlanetName").textContent = state.name || "Безымянный мир";
     $("statusText").textContent = state.name ? "Редактирование · " + state.name : "Безымянный мир";
   });
   $("seedInput").addEventListener("change", () => {
+    checkpointHistory();
     state.seed = normalizeSeed($("seedInput").value);
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
+    state.customCities = [];
+    state.cityNames = {};
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
   });
   $("randomSeedBtn").addEventListener("click", () => {
+    checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.customCities = [];
+    state.cityNames = {};
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
   });
   $("regenerateBtn").addEventListener("click", () => {
+    checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.customCities = [];
+    state.cityNames = {};
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     state.rotation = 0;
     updateInterface(); scheduleGenerate();
   });
   document.querySelectorAll(".preset-card").forEach((button) => button.addEventListener("click", () => {
+    checkpointHistory();
+    state.customCities = [];
+    state.cityNames = {};
     state.preset = button.dataset.preset;
     Object.assign(state, PRESETS[state.preset]);
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
@@ -1032,7 +1021,9 @@
     state.rotation = 0;
     updateInterface(); scheduleGenerate();
   }));
-  ["seaLevel", "landmass", "relief", "temperature", "humidity"].forEach((key) => {
+  ["seaLevel", "landmass", "relief", "temperature", "humidity", "tectonics", "erosion", "season"].forEach((key) => {
+    $(key).addEventListener("pointerdown", checkpointHistory);
+    $(key).addEventListener("keydown", event => { if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key))checkpointHistory(); });
     $(key).addEventListener("input", () => {
       state[key] = Number($(key).value);
       state.preset = "custom";
@@ -1042,26 +1033,25 @@
     });
   });
   $("mapLayer").addEventListener("change", () => {
+    checkpointHistory();
     state.layer = $("mapLayer").value;
     updateInterface();
     if (activeData) { drawTexture(); renderCurrentView(); }
   });
   [["showRivers", "showRivers"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
     $(id).addEventListener("change", () => {
+      checkpointHistory();
       state[key] = $(id).checked;
       if (activeData) { drawTexture(); renderCurrentView(); }
       updateInterface();
     });
   });
   $("regenerateCivBtn").addEventListener("click", () => {
+    checkpointHistory();
     state.civilizationSeed = Math.floor(Math.random() * 2147483646) + 1;
-    if (!activeData) return;
-    const civilization = generateCivilization(activeData.heightField, activeData.temperature, activeData.moisture, activeData.biome, activeData.riverMask, activeData.threshold, activeData.landCount, state.civilizationSeed);
-    Object.assign(activeData, civilization);
-    stats = { ...activeData };
-    drawTexture();
-    updateStats();
-    renderCurrentView();
+    state.customCities = [];
+    state.cityNames = {};
+    refreshCivilization();
     showToast("Цивилизации и торговые пути пересозданы");
   });
   document.querySelectorAll(".view-tab").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -1070,9 +1060,9 @@
     updateInterface(); startAnimation();
     if (!state.rotating && state.view === "globe") drawGlobe();
   });
-  $("zoomInBtn").addEventListener("click", () => { state.zoom = clamp(state.zoom * 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
-  $("zoomOutBtn").addEventListener("click", () => { state.zoom = clamp(state.zoom / 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
-  $("resetViewBtn").addEventListener("click", () => { state.zoom = 1; state.rotation = 0; $("zoomLabel").textContent = "100%"; renderCurrentView(); });
+  $("zoomInBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = clamp(state.zoom * 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
+  $("zoomOutBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = clamp(state.zoom / 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
+  $("resetViewBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = 1; state.rotation = 0; $("zoomLabel").textContent = "100%"; renderCurrentView(); });
   $("fullscreenBtn").addEventListener("click", async () => {
     try {
       if (!document.fullscreenElement) await planetStage.requestFullscreen();
@@ -1081,6 +1071,18 @@
   });
   $("exportBtn").addEventListener("click", createExportMenu);
   $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("undoBtn").addEventListener("click",()=>{if(editHistory&&editHistory.undo())showToast("Изменение отменено");});
+  $("redoBtn").addEventListener("click",()=>{if(editHistory&&editHistory.redo())showToast("Изменение повторено");});
+  $("shareBtn").addEventListener("click",async()=>{
+    if(!window.PlanetForgeShare){showToast("Обмен ссылками недоступен");return;}
+    const url=window.PlanetForgeShare.createURL(projectJSON());
+    try{await navigator.clipboard.writeText(url);showToast("Ссылка на мир скопирована в буфер обмена");}catch(_){window.prompt("Скопируйте ссылку на свой мир:",url);}
+  });
+  document.addEventListener("keydown",event=>{
+    if(!(event.ctrlKey||event.metaKey)||event.altKey)return;const target=event.target;if(target&&/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))return;
+    if(event.key.toLowerCase()==="z"){event.preventDefault();if(event.shiftKey){if(editHistory)editHistory.redo();}else if(editHistory)editHistory.undo();}
+    else if(event.key.toLowerCase()==="y"){event.preventDefault();if(editHistory)editHistory.redo();}
+  });
   $("importFile").addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -1088,6 +1090,7 @@
       if (file.size > 2 * 1024 * 1024) throw new Error("Файл слишком большой");
       const parsed = JSON.parse(await file.text());
       if (parsed.format && parsed.format !== "planetforge-world") throw new Error("Это не проект PlanetForge");
+      checkpointHistory();
       restoreProject(parsed);
       showToast("Проект «" + state.name + "» импортирован");
     } catch (error) {
@@ -1154,7 +1157,9 @@
   const endPointer = () => { pointerState = null; if (state.rotating) startAnimation(); };
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("dblclick", editOrAddCity);
   mapCanvas.addEventListener("pointermove", updateCoordinates);
+  mapCanvas.addEventListener("dblclick", editOrAddCity);
   planetStage.addEventListener("wheel", (event) => {
     if (state.view !== "globe") return;
     event.preventDefault();
@@ -1166,16 +1171,14 @@
   document.addEventListener("fullscreenchange", () => { window.setTimeout(renderCurrentView, 80); });
 
   function initialize() {
-    updateInterface();
+    updateInterface();if(editHistory)editHistory.reset();
     $("renderOverlay").classList.remove("hidden");
-    window.setTimeout(() => {
-      try { generatePlanet(); }
-      catch (error) {
-        console.error(error);
-        $("renderOverlay").classList.add("hidden");
-        showToast("Ошибка генерации. Обновите страницу и попробуйте снова.");
-      }
-    }, 70);
+    const shared=window.PlanetForgeShare?window.PlanetForgeShare.readFromLocation():null;
+    if(shared){restoreProject(shared);if(editHistory)editHistory.reset();return;}
+    window.setTimeout(()=>{
+      try{generatePlanet();}
+      catch(error){console.error(error);$("renderOverlay").classList.add("hidden");showToast("Ошибка генерации. Обновите страницу и попробуйте снова.");}
+    },70);
   }
 
   initialize();

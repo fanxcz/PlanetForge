@@ -236,3 +236,15 @@ input[type=range]::-moz-range-thumb{width:10px;height:10px;border:2px solid #0c1
 .civ-regenerate-button{width:100%;height:34px;margin-top:10px;justify-content:center;font-size:9px}
 .civilization-summary .property-row{margin:9px 0}
 @media(max-width:680px){.layer-toggle{padding:11px}.layer-toggle strong{font-size:11px}.layer-toggle small{font-size:9px}.civ-regenerate-button{height:38px}}
+
+
+/* PlanetForge 2.0 */
+#globe3dCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;pointer-events:none}
+#globe3dCanvas[hidden]{display:none}
+#planetCanvas{position:absolute;inset:0;z-index:2;background:transparent}
+#mapCanvas{position:relative;z-index:1}
+.history-button:disabled{opacity:.3;cursor:not-allowed}
+.topbar-actions .icon-button svg{width:16px;height:16px}
+.export-menu{max-height:min(70vh,540px);overflow:auto}
+.export-menu>button>span{min-width:28px;font-size:10px}
+@media(max-width:680px){.topbar-actions .history-button{display:none}#globe3dCanvas,#planetCanvas{touch-action:pan-y}}

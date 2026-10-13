@@ -10,6 +10,14 @@
 - **Procedural spherical worlds** generated from a deterministic seed using 3D value noise and fractal layers.
 - **Interactive globe** with rotation, drag-to-turn, zoom, surface lighting, and coordinate readout.
 - **Six cartography layers:** biome, elevation, temperature, moisture, procedural river networks, and political territories.
+- **WebGL globe renderer** with Canvas 2D fallback, lighting, ocean highlights, procedural clouds, and atmospheric rim lighting.
+- **Procedural geology:** seeded plate boundaries, adjustable tectonic activity, and terrain relaxation.
+- **Season control and terrain-aware moisture** change climate and biome distribution.
+- **Priority-flood drainage** to route rivers through closed depressions.
+- **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
+- **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
+- **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
+- **High-resolution exports:** PNG 512×256, 2048×1024, 4096×2048, plus geography CSV.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
 - **Surface statistics:** land/water ratio, estimated mean temperature, biome distribution, river-channel cells, settlement count, and generated planetary properties.
@@ -59,11 +67,11 @@ PlanetForge/
 
 ## Technical notes
 
-- Plain HTML, CSS, JavaScript, and Canvas 2D — no runtime framework.
-- A deterministic integer hash and smooth trilinear noise create large-scale landforms and finer detail.
-- Latitude, elevation, temperature, and a procedural moisture field feed into the biome classifier.
+- Plain HTML, CSS, and JavaScript. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
+- A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
+- Latitude, elevation, orbital season, temperature, and terrain-aware moisture feed into the biome classifier.
 - The globe uses an equirectangular texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays.
-- River drainage is a procedural downhill-flow approximation on the sampled height field; political boundaries use nearest-capital regions on a sphere. These are world-building systems, not validated hydrology or political-science models.
+- River drainage uses a priority-flood approximation; boundaries use nearest-capital spherical regions. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
 - Seed-based world generation is deterministic for a given version and set of settings. Future generator changes may intentionally change the resulting surface.
 - Climate and physical values are **procedural estimates for fictional worlds**, not a validated climate or planetary-science simulation.
 
