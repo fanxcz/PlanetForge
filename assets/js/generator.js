@@ -97,7 +97,7 @@ function generateFields(config){
   let applied=0;
   for(const [key,value] of Object.entries(heightOverrides)){
    if(applied>=18000)break;
-   if(!/^\\d+$/.test(key))continue;
+   if(!/^\d+$/.test(key))continue;
    const index=Number(key),elevation=Number(value);
    if(index<0||index>=size||!Number.isFinite(elevation))continue;
    height[index]=clamp(elevation,0,1.15);applied++;

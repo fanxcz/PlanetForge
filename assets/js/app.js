@@ -67,6 +67,11 @@
   let borderPaintPointer = null;
   let lastBorderPaintPoint = null;
   let lastBorderPaintAt = 0;
+  let terrainPaintPointer = null;
+  let lastTerrainPaintPoint = null;
+  let terrainPaintAt = 0;
+  let terrainStrokeBase = null;
+  let terrainStrokeTarget = 0;
   let exportMenu = null;
   let activeData = null;
   let stats = null;
@@ -81,6 +86,7 @@
     rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
     showRivers:true,showLakes:true,showDeltas:true,showCities:true,showRoutes:true,showBorders:true,
     editBorders:false,borderCountry:0,customTerritories:{},
+    editTerrain:false,terrainBrush:"raise",terrainBrushSize:8,terrainBrushStrength:45,customHeightOverrides:{},
     tectonics:56,erosion:28,season:50,customCities:[],cityNames:{}
   };
   const editHistory=window.PlanetForgeHistory?window.PlanetForgeHistory.create({
@@ -393,7 +399,8 @@
       width: MAP_W, height: MAP_H, seed: Number(state.seed) >>> 0,
       temperature: Number(state.temperature), humidity: Number(state.humidity), relief: Number(state.relief),
       tectonics: Number(state.tectonics), erosion: Number(state.erosion), season: Number(state.season),
-      seaLevel: Number(state.seaLevel), landmass: Number(state.landmass)
+      seaLevel: Number(state.seaLevel), landmass: Number(state.landmass),
+      heightOverrides: state.customHeightOverrides
     };
   }
 
@@ -872,6 +879,14 @@
     $("rotateBtn").setAttribute("aria-pressed", String(state.rotating));
     $("mapLayer").value = state.layer;
     $("editBorders").checked = state.editBorders;
+    $("editTerrain").checked = state.editTerrain;
+    $("terrainBrushMode").value = state.terrainBrush;
+    $("terrainBrushSize").value = state.terrainBrushSize;
+    $("terrainBrushStrength").value = state.terrainBrushStrength;
+    $("terrainBrushSizeOut").textContent = state.terrainBrushSize + " ячеек";
+    $("terrainBrushStrengthOut").textContent = state.terrainBrushStrength + "%";
+    $("terrainEditorHint").textContent = state.editTerrain ? "Кисть активна: рисуйте по карте мира. Биомы и климат обновятся после завершения мазка." : "Переключитесь на «Карта мира», включите кисть и рисуйте мышью или пальцем.";
+    mapCanvas.classList.toggle("painting",state.view==="map"&&(state.editBorders||state.editTerrain));
     $("borderCountrySelect").value = String(state.borderCountry);
     $("borderEditorHint").textContent = state.editBorders ? "Кисть активна: нажмите и ведите по суше на карте." : "Включите кисть и выберите государство, чтобы рисовать границы.";
     mapCanvas.classList.toggle("painting", state.view === "map" && state.editBorders);
@@ -919,7 +934,7 @@
   }
 
   function setView(view) {
-    if(view!=="map")state.editBorders=false;
+    if(view!=="map"){state.editBorders=false;state.editTerrain=false;}
     state.view = view;
     document.querySelectorAll(".view-tab").forEach((button) => {
       const active = button.dataset.view === view;
@@ -1023,7 +1038,7 @@
   function projectJSON() {
     return {
       format: "planetforge-world",
-      version: 2,
+      version: 3,
       name: state.name,
       seed: Number(state.seed),
       preset: state.preset,
@@ -1032,7 +1047,9 @@
       customCities: state.customCities,
       cityNames: state.cityNames,
       customTerritories: state.customTerritories,
-      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders, editBorders: state.editBorders, borderCountry: state.borderCountry },
+      customHeightOverrides: state.customHeightOverrides,
+      terrainBrush: { mode: state.terrainBrush, size: state.terrainBrushSize, strength: state.terrainBrushStrength },
+      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders, editBorders: state.editBorders, editTerrain: state.editTerrain, borderCountry: state.borderCountry },
       exportedAt: new Date().toISOString()
     };
   }
@@ -1169,6 +1186,7 @@
     checkpointHistory();
     state.name = world.name;
     state.seed = world.seed;
+    state.customHeightOverrides = {};
     state.preset = world.preset;
     Object.assign(state, PRESETS[world.preset]);
     state.civilizationSeed = (world.seed ^ 0x51ed1234) >>> 0;
@@ -1268,6 +1286,21 @@
     state.erosion = clampInt(settings.erosion, 0, 100, 28);
     state.season = clampInt(settings.season, 0, 100, 50);
     state.customCities = Array.isArray(input.customCities) ? input.customCities.slice(0,100).filter(city=>city&&typeof city==="object").map((city,index)=>({id:String(city.id||index),name:String(city.name||"New Haven").slice(0,48),x:clampInt(city.x,0,MAP_W-1,0),y:clampInt(city.y,0,MAP_H-1,0)})) : [];
+    state.customHeightOverrides = {};
+    if(input.customHeightOverrides&&typeof input.customHeightOverrides==="object"&&!Array.isArray(input.customHeightOverrides)){
+      let accepted=0;
+      for(const [key,value] of Object.entries(input.customHeightOverrides)){
+        if(accepted>=18000)break;
+        const index=Number(key),elevation=Number(value);
+        if(/^\d+$/.test(key)&&index>=0&&index<MAP_W*MAP_H&&Number.isFinite(elevation)){
+          state.customHeightOverrides[key]=Number(clamp(elevation,0,1.15).toFixed(5));accepted++;
+        }
+      }
+    }
+    const brush=input.terrainBrush||{};
+    state.terrainBrush=["raise","lower","smooth","plateau","crater","land","water"].includes(brush.mode)?brush.mode:"raise";
+    state.terrainBrushSize=clampInt(brush.size,2,28,8);
+    state.terrainBrushStrength=clampInt(brush.strength,5,100,45);
     state.customTerritories = {};
     if(input.customTerritories&&typeof input.customTerritories==="object"&&!Array.isArray(input.customTerritories)){
       Object.entries(input.customTerritories).slice(0,MAP_W*MAP_H).forEach(([key,value])=>{
@@ -1276,6 +1309,8 @@
       });
     }
     state.editBorders = !!(input.view&&input.view.editBorders);
+    state.editTerrain = !!(input.view&&input.view.editTerrain);
+    if(state.editTerrain&&state.editBorders)state.editBorders=false;
     state.borderCountry = clampInt(input.view&&input.view.borderCountry,0,5,0);
     state.cityNames = {};
     if(input.cityNames&&typeof input.cityNames==="object"&&!Array.isArray(input.cityNames))Object.keys(input.cityNames).slice(0,100).forEach(key=>{if(/^\d+$/.test(key))state.cityNames[key]=String(input.cityNames[key]).slice(0,48);});
@@ -1328,6 +1363,7 @@
   $("seedInput").addEventListener("change", () => {
     checkpointHistory();
     state.seed = normalizeSeed($("seedInput").value);
+    state.customHeightOverrides = {};
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.customCities = [];
     state.customTerritories = {};
@@ -1338,6 +1374,7 @@
   $("randomSeedBtn").addEventListener("click", () => {
     checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.customHeightOverrides = {};
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
@@ -1348,6 +1385,7 @@
   $("regenerateBtn").addEventListener("click", () => {
     checkpointHistory();
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.customHeightOverrides = {};
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
@@ -1362,6 +1400,7 @@
     state.customTerritories = {};
     state.cityNames = {};
     state.preset = button.dataset.preset;
+    state.customHeightOverrides = {};
     Object.assign(state, PRESETS[state.preset]);
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
@@ -1387,8 +1426,27 @@
   });
   $("editBorders").addEventListener("change",()=>{
     checkpointHistory();state.editBorders=$("editBorders").checked;
-    if(state.editBorders)setView("map");else{updateInterface();renderCurrentView();}
+    if(state.editBorders){state.editTerrain=false;setView("map");}else{updateInterface();renderCurrentView();}
     showToast(state.editBorders?"Кисть границ включена":"Редактирование границ выключено");
+  });
+  $("editTerrain").addEventListener("change",()=>{
+    checkpointHistory();state.editTerrain=$("editTerrain").checked;
+    if(state.editTerrain){state.editBorders=false;setView("map");}else{updateInterface();renderCurrentView();}
+    showToast(state.editTerrain?"Кисть рельефа включена":"Редактирование рельефа выключено");
+  });
+  $("terrainBrushMode").addEventListener("change",()=>{
+    checkpointHistory();state.terrainBrush=$("terrainBrushMode").value;scheduleAutosave();
+  });
+  [["terrainBrushSize","terrainBrushSize"],["terrainBrushStrength","terrainBrushStrength"]].forEach(([id,key])=>{
+    $(id).addEventListener("input",()=>{
+      state[key]=Number($(id).value);
+      $(id+"Out").textContent=key==="terrainBrushSize"?state[key]+" ячеек":state[key]+"%";
+      updateInterface();scheduleAutosave();
+    });
+  });
+  $("clearTerrainEditsBtn").addEventListener("click",()=>{
+    if(!Object.keys(state.customHeightOverrides).length){showToast("Ручных изменений рельефа нет");return;}
+    checkpointHistory();state.customHeightOverrides={};state.editTerrain=false;updateInterface();scheduleGenerate();showToast("Рельеф восстановлен по генератору");
   });
   $("borderCountrySelect").addEventListener("change",()=>{
     state.borderCountry=clampInt($("borderCountrySelect").value,0,5,0);scheduleAutosave();
@@ -1479,6 +1537,46 @@
   function mapCellFromPoint(point){
     return{x:((Math.floor((point.lon+180)/360*MAP_W)%MAP_W)+MAP_W)%MAP_W,y:clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1)};
   }
+  function terrainBrushSettings(){return{mode:state.terrainBrush,radius:state.terrainBrushSize,strength:state.terrainBrushStrength/100};}
+  function stampTerrainBrush(center){
+    if(!activeData||!state.editTerrain)return;
+    const data=activeData,{mode,radius,strength}=terrainBrushSettings(),height=data.heightField,base=terrainStrokeBase||height;
+    const changed=new Set(),latitude=(90-(center.y+.5)/MAP_H*180)*Math.PI/180,cosLat=Math.max(.25,Math.cos(latitude));
+    const yRadius=radius,xRadius=Math.ceil(radius/cosLat);
+    for(let oy=-yRadius;oy<=yRadius;oy++){
+      const y=center.y+oy;if(y<0||y>=MAP_H)continue;
+      for(let ox=-xRadius;ox<=xRadius;ox++){
+        const x=((center.x+ox)%MAP_W+MAP_W)%MAP_W,dx=ox*cosLat,dist=Math.sqrt(dx*dx+oy*oy)/radius;
+        if(dist>1)continue;
+        const index=y*MAP_W+x,falloff=Math.pow(Math.max(0,1-dist*dist),1.6),current=height[index],original=base[index],amount=strength*falloff;
+        let next=current;
+        if(mode==="raise")next=current+.045*amount;
+        else if(mode==="lower")next=current-.045*amount;
+        else if(mode==="smooth"){
+          const left=y*MAP_W+(x-1+MAP_W)%MAP_W,right=y*MAP_W+(x+1)%MAP_W,up=Math.max(0,y-1)*MAP_W+x,down=Math.min(MAP_H-1,y+1)*MAP_W+x;
+          const average=(base[left]+base[right]+base[up]+base[down]+original)/5;
+          next=lerp(current,average,clamp(amount*.9,0,.9));
+        }else if(mode==="plateau")next=lerp(current,terrainStrokeTarget,clamp(amount,0,1));
+        else if(mode==="crater")next=current-.06*amount*Math.max(0,1-dist*1.22)+.022*strength*Math.exp(-Math.pow((dist-.76)/.12,2));
+        else if(mode==="land")next=lerp(current,data.threshold+.035,clamp(amount*2.4,0,1));
+        else if(mode==="water")next=lerp(current,data.threshold-.035,clamp(amount*2.4,0,1));
+        next=clamp(next,0,1.15);
+        if(Math.abs(next-current)<.00005)continue;
+        if(!Object.prototype.hasOwnProperty.call(state.customHeightOverrides,String(index))&&Object.keys(state.customHeightOverrides).length>=18000)continue;
+        height[index]=next;state.customHeightOverrides[String(index)]=Number(next.toFixed(5));changed.add(index);
+      }
+    }
+    if(changed.size){drawTexture();renderCurrentView();$("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";}
+  }
+  function paintTerrainSegment(start,end){
+    if(!activeData||!state.editTerrain||state.view!=="map")return;
+    let dx=end.x-start.x;if(dx>MAP_W/2)dx-=MAP_W;else if(dx< -MAP_W/2)dx+=MAP_W;
+    const dy=end.y-start.y,steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))));
+    for(let step=0;step<=steps;step++){
+      const t=step/steps,x=((Math.round(start.x+dx*t)%MAP_W)+MAP_W)%MAP_W,y=clamp(Math.round(start.y+dy*t),0,MAP_H-1);
+      stampTerrainBrush({x,y});
+    }
+  }
   function updatePaintedBorders(data,changed){
     const affected=new Set(),heightField=data.heightField,territories=data.territories,borders=data.borders,threshold=data.threshold;
     for(const index of changed){
@@ -1562,6 +1660,12 @@
   canvas.addEventListener("pointercancel", endPointer);
   canvas.addEventListener("dblclick", editOrAddCity);
   mapCanvas.addEventListener("pointerdown", event=>{
+    if(state.editTerrain&&state.view==="map"&&event.button===0){
+      const point=pointerCoordinates(event);if(!point)return;
+      event.preventDefault();checkpointHistory();terrainPaintPointer=event.pointerId;lastTerrainPaintPoint=mapCellFromPoint(point);
+      terrainStrokeBase=activeData.heightField.slice();terrainStrokeTarget=activeData.heightField[lastTerrainPaintPoint.y*MAP_W+lastTerrainPaintPoint.x];
+      terrainPaintAt=performance.now();mapCanvas.setPointerCapture(event.pointerId);paintTerrainSegment(lastTerrainPaintPoint,lastTerrainPaintPoint);return;
+    }
     if(!state.editBorders||state.view!=="map"||event.button!==0)return;
     const point=pointerCoordinates(event);if(!point)return;
     event.preventDefault();checkpointHistory();borderPaintPointer=event.pointerId;lastBorderPaintPoint=mapCellFromPoint(point);lastBorderPaintAt=performance.now();
@@ -1569,16 +1673,29 @@
   });
   mapCanvas.addEventListener("pointermove", event=>{
     updateCoordinates(event);
+    if(terrainPaintPointer===event.pointerId&&state.editTerrain){
+      const now=performance.now();if(now-terrainPaintAt<28)return;
+      const point=pointerCoordinates(event);if(!point)return;
+      const cell=mapCellFromPoint(point);if(lastTerrainPaintPoint)paintTerrainSegment(lastTerrainPaintPoint,cell);
+      lastTerrainPaintPoint=cell;terrainPaintAt=now;return;
+    }
     if(borderPaintPointer!==event.pointerId||!state.editBorders)return;
     const now=performance.now();if(now-lastBorderPaintAt<24)return;
     const point=pointerCoordinates(event);if(!point)return;
     const cell=mapCellFromPoint(point);if(lastBorderPaintPoint)paintBorderSegment(lastBorderPaintPoint,cell);
     lastBorderPaintPoint=cell;lastBorderPaintAt=now;
   });
+  const finishTerrainPaint=event=>{
+    if(terrainPaintPointer!==event.pointerId)return;
+    terrainPaintPointer=null;lastTerrainPaintPoint=null;terrainStrokeBase=null;
+    if(state.editTerrain){scheduleAutosave();scheduleGenerate();showToast("Рельеф изменён: пересчитываем климат, биомы и реки");}
+  };
   const finishBorderPaint=event=>{
     if(borderPaintPointer!==event.pointerId)return;
     borderPaintPointer=null;lastBorderPaintPoint=null;scheduleAutosave();
   };
+  mapCanvas.addEventListener("pointerup",finishTerrainPaint);
+  mapCanvas.addEventListener("pointercancel",finishTerrainPaint);
   mapCanvas.addEventListener("pointerup",finishBorderPaint);
   mapCanvas.addEventListener("pointercancel",finishBorderPaint);
   mapCanvas.addEventListener("dblclick", editOrAddCity);

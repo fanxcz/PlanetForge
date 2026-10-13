@@ -470,3 +470,18 @@ input[type=range]{accent-color:#34795d}
  .layer-toggle small{font-size:9px}
  .compare-card{background:#f8faf7}
 }
+
+
+/* Terrain sculpt tools */
+.terrain-editor{margin-top:16px;padding:11px;border:1px solid #cbd5cc;border-radius:4px;background:#ebf0eb}
+.terrain-editor summary{cursor:pointer;color:#2f4938;font-size:11px;font-weight:650;list-style-position:inside}
+.terrain-editor[open] summary{padding-bottom:10px;border-bottom:1px solid #d1d9d2;margin-bottom:10px}
+.terrain-editor-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#35443a;font-size:11px}
+.terrain-editor-toggle input{accent-color:#34795d}
+.terrain-editor .select-input{width:100%;height:34px}
+.terrain-editor-help{margin:10px 0 0;color:#68786b;font-size:10px;line-height:1.55}
+.terrain-clear-button{width:100%;margin-top:11px;justify-content:center;min-height:34px}
+#mapCanvas.painting{cursor:crosshair;touch-action:none}
+:focus-visible{outline:2px solid #36765a;outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #36765a;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}

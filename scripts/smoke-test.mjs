@@ -20,7 +20,7 @@ assert.deepEqual(missing,[],"Missing UI IDs: "+missing.join(", "));
 
 for(const path of ["assets/css/style.css","assets/js/app.js","assets/js/globe3d.js","assets/js/generator.js","assets/js/planet-worker.js","assets/js/export-worker.js","assets/js/history.js","assets/js/share.js","assets/favicon.svg",".nojekyll"])assert.ok(existsSync(path),"Missing static asset "+path);
 for(const symbol of ["generateRivers","generateCivilization","applyCustomCities","refreshCivilization","drawCivilizationGlobe","drawCivilizationMap","exportPNG","exportGeographyCSV","projectJSON","restoreProject","editOrAddCity","finishPlanetFields","createTerrainWorker"])assert.ok(js.includes("function "+symbol+"("),"Missing function "+symbol);
-for(const id of ["showRivers","showLakes","showDeltas","showCities","showRoutes","showBorders","editBorders","borderCountrySelect","borderEditorHint","regenerateCivBtn","cityCountStat","countryCountStat","riverCountStat","lakeCountStat","deltaCountStat","globe3dCanvas","undoBtn","redoBtn","shareBtn","galleryBtn","galleryDialog","galleryWorldsList","compareBtn","compareDialog","compareTarget","autosaveStatus","tectonics","erosion","season"])assert.ok(idSet.has(id),"Missing interface control "+id);
+for(const id of ["showRivers","showLakes","showDeltas","showCities","showRoutes","showBorders","editBorders","borderCountrySelect","borderEditorHint","editTerrain","terrainBrushMode","terrainBrushSize","terrainBrushStrength","terrainBrushSizeOut","terrainBrushStrengthOut","terrainEditorHint","clearTerrainEditsBtn","regenerateCivBtn","cityCountStat","countryCountStat","riverCountStat","lakeCountStat","deltaCountStat","globe3dCanvas","undoBtn","redoBtn","shareBtn","galleryBtn","galleryDialog","galleryWorldsList","compareBtn","compareDialog","compareTarget","autosaveStatus","tectonics","erosion","season"])assert.ok(idSet.has(id),"Missing interface control "+id);
 for(const feature of ["uSurface","uMode","cloudNoise","uRotation","webglcontextlost","deformSurfaceMesh"])assert.ok(renderer.includes(feature),"Missing WebGL feature "+feature);
 assert.ok(renderer.includes("elevation-seaLevel")&&renderer.includes("surfacePositionBuffer"),"3D terrain mesh is not displaced by generated elevation");
 assert.ok(worker.includes("importScripts")&&worker.includes("postMessage"),"Worker message transport incomplete");
@@ -82,4 +82,12 @@ const summer=globalThis.PlanetForgeGenerator.generateFields({...config,season:50
 assert.notDeepEqual(Array.from(winter.temperature),Array.from(summer.temperature),"Season settings should affect temperature fields");
 const quietPlates=globalThis.PlanetForgeGenerator.generateFields({...config,tectonics:0});
 assert.notDeepEqual(Array.from(quietPlates.heightField),Array.from(a.heightField),"Tectonic activity should affect terrain elevation");
+const overrideIndex=24*96+48,sculpted=globalThis.PlanetForgeGenerator.generateFields({...config,heightOverrides:{[overrideIndex]:1.02}});
+assert.equal(sculpted.heightField[overrideIndex],1.02,"Manual elevation overrides must survive generation");
+assert.notEqual(sculpted.temperature[overrideIndex],a.temperature[overrideIndex],"Edited elevation must recalculate temperature");
+assert.ok(sculpted.counts.reduce((sum,n)=>sum+n,0)===96*48,"Edited terrain must be reclassified into biome counts");
+assert.ok(Math.max(...sculpted.heightField)<=1.15,"Terrain override must be clamped");
+assert.ok(js.includes("function stampTerrainBrush(")&&js.includes("function paintTerrainSegment("),"Terrain brush implementation is missing");
+assert.ok(js.includes("customHeightOverrides")&&js.includes("version: 3"),"Sculpted terrain must persist in versioned projects");
+assert.ok(generator.includes("heightOverrides")&&generator.includes("leeward")&&generator.includes("coastal"),"Terrain-aware climate effects are missing");
 console.log("PlanetForge smoke tests passed: script wiring, WebGL, worker fields, deterministic terrain, climate, tectonics, heightmaps, map mode hidden-state regression, border painting, export, gallery, editing and sharing.");

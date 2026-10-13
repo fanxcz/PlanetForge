@@ -13,6 +13,7 @@
 - **WebGL globe renderer** with Canvas 2D fallback, lighting, ocean highlights, procedural clouds, and atmospheric rim lighting.
 - **Off-main-thread terrain generation** via Web Worker; stale slider generations are cancelled, and the deterministic main-thread generator remains as a fallback.
 - **Procedural geology:** seeded plate boundaries, adjustable tectonic activity, and terrain relaxation.
+- **Terrain sculpting:** map-based raise, lower, smooth, plateau, crater, land and water brushes. Sparse elevation overrides persist in project JSON/autosave/share links and feed back into climate and biome generation.
 - **Season control and terrain-aware moisture** change climate and biome distribution.
 - **Priority-flood drainage** to route rivers through closed depressions, visualize basin-fill lakes, and mark high-flow river deltas at shorelines.
 - **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
@@ -84,7 +85,7 @@ PlanetForge/
 
 - Plain HTML, CSS, and JavaScript. Terrain fields are generated in a Web Worker when supported, with a deterministic synchronous fallback. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
 - A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
-- Latitude, elevation, orbital season, temperature, and terrain-aware moisture feed into the biome classifier.
+- Latitude, elevation, orbital season, temperature, terrain-aware moisture, coastal moderation, and stylized prevailing-wind/rain-shadow effects feed into the biome classifier.
 - The globe uses an equirectangular texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays.
 - River drainage uses a priority-flood approximation; boundaries use nearest-capital spherical regions. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
 - Seed-based world generation is deterministic for a given version and set of settings. Future generator changes may intentionally change the resulting surface.

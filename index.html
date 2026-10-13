@@ -66,6 +66,22 @@
           <div class="slider-head slider-spaced"><label for="erosion">Сглаживание эрозией</label><output id="erosionOut">28%</output></div>
           <input type="range" id="erosion" min="0" max="100" value="28" step="1">
           <div class="range-caption"><span>Резкий рельеф</span><span>Мягкие формы</span></div>
+          <details class="terrain-editor" id="terrainEditorDetails">
+            <summary>Ручное редактирование рельефа</summary>
+            <label class="terrain-editor-toggle" for="editTerrain"><span>Включить кисть рельефа</span><input id="editTerrain" type="checkbox"></label>
+            <label class="field-label field-label-spaced" for="terrainBrushMode">Инструмент</label>
+            <select id="terrainBrushMode" class="select-input">
+              <option value="raise">Поднять поверхность</option><option value="lower">Опустить поверхность</option>
+              <option value="smooth">Сгладить рельеф</option><option value="plateau">Выровнять в плато</option>
+              <option value="crater">Создать кратер</option><option value="land">Создать сушу</option><option value="water">Затопить участок</option>
+            </select>
+            <div class="slider-head slider-spaced"><label for="terrainBrushSize">Размер кисти</label><output id="terrainBrushSizeOut">8 ячеек</output></div>
+            <input type="range" id="terrainBrushSize" min="2" max="28" value="8" step="1">
+            <div class="slider-head slider-spaced"><label for="terrainBrushStrength">Сила кисти</label><output id="terrainBrushStrengthOut">45%</output></div>
+            <input type="range" id="terrainBrushStrength" min="5" max="100" value="45" step="5">
+            <button class="button button-quiet terrain-clear-button" id="clearTerrainEditsBtn" type="button">Сбросить ручные изменения</button>
+            <p class="terrain-editor-help" id="terrainEditorHint">Переключитесь на «Карта мира», включите кисть и рисуйте мышью или пальцем. Рельеф, климат, биомы и реки пересчитаются после мазка.</p>
+          </details>
         </section>
 
         <section class="control-section">
