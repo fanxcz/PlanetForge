@@ -14,7 +14,7 @@
     <header class="topbar">
       <a class="brand" href="./" aria-label="PlanetForge — главная">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span class="brand-copy"><strong>PLANET<span>FORGE</span></strong><small>PROCEDURAL WORLD LAB</small></span>
+        <span class="brand-copy"><strong>PLANET<span>FORGE</span></strong><small>ЛАБОРАТОРИЯ МИРОВ</small></span>
       </a>
       <div class="topbar-center"><span class="live-dot"></span><span id="statusText">Готов к созданию мира</span><span class="topbar-divider"></span><span class="mono" id="seedBadge">SEED 840271</span></div>
       <div class="topbar-actions">
@@ -32,20 +32,20 @@
     <nav class="mobile-nav" id="mobileNav" aria-label="Разделы приложения">
       <button class="mobile-nav-item active" type="button" data-mobile-view="world" aria-pressed="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18"/></svg>
-        <span>Планета</span>
+        <span>Мир</span>
       </button>
       <button class="mobile-nav-item" type="button" data-mobile-view="settings" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
-        <span>Настройки</span>
+        <span>Создать</span>
       </button>
       <button class="mobile-nav-item" type="button" data-mobile-view="data" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></svg>
-        <span>Данные</span>
+        <span>Обзор</span>
       </button>
     </nav>
     <main class="workspace" data-mobile-view="world">
       <aside class="sidebar left-sidebar">
-        <div class="panel-heading"><div><span class="eyebrow">WORLD BUILDER</span><h1>Конструктор мира</h1></div><span class="heading-icon">✳</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">НАСТРОЙКИ ПЛАНЕТЫ</span><h1>Конструктор мира</h1></div><span class="heading-icon">✳</span></div>
         <section class="control-section">
           <div class="section-title"><span class="section-number">01</span><h2>Основа планеты</h2></div>
           <label class="field-label" for="planetName">Название мира</label>
@@ -133,6 +133,13 @@
       </aside>
 
       <section class="viewport-column">
+        <div class="scene-heading">
+          <div>
+            <span class="eyebrow">WORLD STUDIO / 01</span>
+            <h2>Твой мир. <span>Твои законы.</span></h2>
+          </div>
+          <div class="scene-heading-meta"><span class="scene-meta-dot"></span><span id="sceneHint">Веди пальцем или мышью по глобусу</span></div>
+        </div>
         <div class="viewport-toolbar">
           <div class="view-tabs" role="tablist" aria-label="Режим просмотра">
             <button class="view-tab active" data-view="globe" role="tab" aria-selected="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>Глобус 3D</button>
@@ -164,7 +171,7 @@
       </section>
 
       <aside class="sidebar right-sidebar">
-        <div class="panel-heading insight-heading"><div><span class="eyebrow">PLANETARY DATA</span><h2>Параметры мира</h2></div><button class="icon-button small" id="copySeedBtn" title="Копировать seed" aria-label="Копировать seed"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button></div>
+        <div class="panel-heading insight-heading"><div><span class="eyebrow">ДАННЫЕ ПЛАНЕТЫ</span><h2>Параметры мира</h2></div><button class="icon-button small" id="copySeedBtn" title="Копировать seed" aria-label="Копировать seed"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button></div>
         <div class="world-name-card"><span class="mini-orbit">◎</span><div><strong id="statsPlanetName">Aurelia</strong><small id="planetClass">TERRESTRIAL · CLASS M</small></div><span class="world-status">STABLE</span></div>
         <div class="stat-grid">
           <article class="stat-card"><span class="stat-label">Площадь суши</span><strong id="landStat">32.4<span>%</span></strong><div class="stat-track"><i id="landBar" style="width:32.4%"></i></div><small>от поверхности</small></article>

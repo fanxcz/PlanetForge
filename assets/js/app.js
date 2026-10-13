@@ -89,7 +89,7 @@
   let exportJobSequence = 0;
 
   const state = {
-    ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
+    ...DEFAULTS, view:"globe", layer:"biome", rotation:0, rotationX:0, zoom:1,
     rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
     showRivers:true,showLakes:true,showDeltas:true,showCities:true,showRoutes:true,showBorders:true,
     editBorders:false,borderCountry:0,customTerritories:{},
@@ -589,12 +589,14 @@
     if (!activeData || state.view !== "globe") return;
     resizeCanvas(canvas, ctx);
     const w = canvas.width, h = canvas.height;
+    canvas.dataset.rotationX = String(state.rotationX);
+    canvas.dataset.rotationY = String(state.rotation);
     ctx.clearRect(0, 0, w, h);
     const cx = w * 0.5;
     const cy = h * 0.51;
     const baseRadius = Math.min(w, h) * 0.355;
     const radius = Math.max(35, Math.min(Math.min(w, h) * 0.46, baseRadius * state.zoom));
-    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, radius, w, h, cy, Number(state.seed), activeData.heightField, activeData.threshold)) {
+    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, state.rotationX, radius, w, h, cy, Number(state.seed), activeData.heightField, activeData.threshold)) {
       drawCivilizationGlobe(cx, cy, radius);
       return;
     }
@@ -623,11 +625,11 @@
     const data = img.data;
     const r = diameter / 2;
     const lightX = -0.42, lightY = 0.31, lightZ = 0.852;
-    const rotation = state.rotation;
+    const rotation = state.rotation, rotationX = state.rotationX;
+    const cosY = Math.cos(rotation), sinY = Math.sin(rotation);
+    const cosX = Math.cos(rotationX), sinX = Math.sin(rotationX);
     for (let py = 0; py < diameter; py++) {
       const ny = (r - py - 0.5) / r;
-      const lat = Math.asin(clamp(ny, -1, 1));
-      const v = clamp(Math.floor((0.5 - lat / Math.PI) * MAP_H), 0, MAP_H - 1);
       for (let px = 0; px < diameter; px++) {
         const nx = (px + 0.5 - r) / r;
         const rr = nx * nx + ny * ny;
@@ -637,7 +639,14 @@
           continue;
         }
         const nz = Math.sqrt(1 - rr);
-        const lon = Math.atan2(nx, nz) + rotation;
+        // Convert the screen-space normal back into the planet's local coordinates.
+        const yLocal = ny * cosX + nz * sinX;
+        const zAfterPitch = -ny * sinX + nz * cosX;
+        const xLocal = nx * cosY + zAfterPitch * sinY;
+        const zLocal = -nx * sinY + zAfterPitch * cosY;
+        const lat = Math.asin(clamp(yLocal, -1, 1));
+        const v = clamp(Math.floor((0.5 - lat / Math.PI) * MAP_H), 0, MAP_H - 1);
+        const lon = Math.atan2(xLocal, zLocal);
         let u = Math.floor(((lon / TAU + 0.5) % 1) * MAP_W);
         if (u < 0) u += MAP_W;
         const src = (v * MAP_W + u) * 4;
@@ -708,7 +717,9 @@
       const lat = city.lat * Math.PI / 180;
       const lon = city.lon * Math.PI / 180 - state.rotation;
       const cosLat = Math.cos(lat);
-      const nx = cosLat * Math.sin(lon), ny = Math.sin(lat), nz = cosLat * Math.cos(lon);
+      const nx = cosLat * Math.sin(lon), baseY = Math.sin(lat), baseZ = cosLat * Math.cos(lon);
+      const ny = baseY * Math.cos(state.rotationX) - baseZ * Math.sin(state.rotationX);
+      const nz = baseY * Math.sin(state.rotationX) + baseZ * Math.cos(state.rotationX);
       if (nz > 0.035) visible.set(city.id, { x: cx + nx * radius, y: cy - ny * radius, z: nz, city });
     }
 
@@ -1264,6 +1275,7 @@
     state.layer = "biome";
     state.view = "globe";
     state.rotation = 0;
+    state.rotationX = 0;
     state.zoom = 1;
     updateInterface();
     setView("globe");
@@ -1387,6 +1399,7 @@
     state.showRoutes = input.view && typeof input.view.showRoutes === "boolean" ? input.view.showRoutes : true;
     state.showBorders = input.view && typeof input.view.showBorders === "boolean" ? input.view.showBorders : true;
     state.rotation = 0;
+    state.rotationX = 0;
     updateInterface();
     scheduleGenerate();
   }
@@ -1456,6 +1469,7 @@
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     state.rotation = 0;
+    state.rotationX = 0;
     updateInterface(); scheduleGenerate();
   });
   document.querySelectorAll(".preset-card").forEach((button) => button.addEventListener("click", () => {
@@ -1469,6 +1483,7 @@
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.rotation = 0;
+    state.rotationX = 0;
     updateInterface(); scheduleGenerate();
   }));
   ["seaLevel", "landmass", "relief", "temperature", "humidity", "tectonics", "erosion", "season"].forEach((key) => {
@@ -1551,7 +1566,7 @@
   });
   $("zoomInBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = clamp(state.zoom * 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
   $("zoomOutBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = clamp(state.zoom / 1.12, .65, 1.55); $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%"; renderCurrentView(); });
-  $("resetViewBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = 1; state.rotation = 0; $("zoomLabel").textContent = "100%"; renderCurrentView(); });
+  $("resetViewBtn").addEventListener("click", () => { checkpointHistory(); state.zoom = 1; state.rotation = 0; state.rotationX = 0; canvas.dataset.rotationX = "0"; canvas.dataset.rotationY = "0"; $("zoomLabel").textContent = "100%"; renderCurrentView(); });
   $("fullscreenBtn").addEventListener("click", async () => {
     try {
       if (!document.fullscreenElement) await planetStage.requestFullscreen();
@@ -1710,8 +1725,14 @@
       const ny = ((rect.top + rect.height * .51) - event.clientY) / r;
       if (nx * nx + ny * ny > 1) return null;
       const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
-      const lat = Math.asin(clamp(ny, -1, 1)) * 180 / Math.PI;
-      let lon = (Math.atan2(nx, nz) + state.rotation) * 180 / Math.PI;
+      const cosX = Math.cos(state.rotationX), sinX = Math.sin(state.rotationX);
+      const cosY = Math.cos(state.rotation), sinY = Math.sin(state.rotation);
+      const localY = ny * cosX + nz * sinX;
+      const zAfterPitch = -ny * sinX + nz * cosX;
+      const localX = nx * cosY + zAfterPitch * sinY;
+      const localZ = -nx * sinY + zAfterPitch * cosY;
+      const lat = Math.asin(clamp(localY, -1, 1)) * 180 / Math.PI;
+      let lon = Math.atan2(localX, localZ) * 180 / Math.PI;
       lon = ((lon + 180) % 360 + 360) % 360 - 180;
       return { lat, lon };
     }
@@ -1730,22 +1751,33 @@
   }
   canvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    pointerState = { x: event.clientX, rotation: state.rotation };
+    pointerState = { x: event.clientX, y: event.clientY, rotation: state.rotation, rotationX: state.rotationX };
     dragMoved = false;
     canvas.setPointerCapture(event.pointerId);
+    canvas.dataset.dragging = "true";
     if (state.rotating) { state.rotating = false; updateInterface(); startAnimation(); }
   });
   canvas.addEventListener("pointermove", (event) => {
-    updateCoordinates(event);
-    if (!pointerState) return;
+    if (!pointerState) { updateCoordinates(event); return; }
     const dx = event.clientX - pointerState.x;
-    if (Math.abs(dx) > 2) dragMoved = true;
+    const dy = event.clientY - pointerState.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
     if (dragMoved) {
-      state.rotation = pointerState.rotation + dx / Math.max(160, canvas.clientWidth) * TAU;
+      // Invert yaw so the visible surface follows the pointer in the same direction.
+      // Pitch is deliberately unbounded: the globe can pass either pole and keep turning.
+      state.rotation = pointerState.rotation - dx / Math.max(160, canvas.clientWidth) * TAU;
+      state.rotationX = pointerState.rotationX + dy / Math.max(160, canvas.clientHeight) * TAU;
+      canvas.dataset.rotationY = String(state.rotation);
+      canvas.dataset.rotationX = String(state.rotationX);
       drawGlobe();
     }
+    updateCoordinates(event);
   });
-  const endPointer = () => { pointerState = null; if (state.rotating) startAnimation(); };
+  const endPointer = () => {
+    pointerState = null;
+    delete canvas.dataset.dragging;
+    if (state.rotating) startAnimation();
+  };
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
   canvas.addEventListener("dblclick", editOrAddCity);

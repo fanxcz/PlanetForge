@@ -128,3 +128,27 @@ test("mobile layout has readable bottom navigation and no horizontal overflow", 
   await expect(page.locator(".left-sidebar")).toBeHidden();
   await expect(page.locator(".right-sidebar")).toBeHidden();
 });
+
+test("globe drag rotates both axes in the direction of the pointer", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openReadyWorld(page);
+  const canvas = page.locator("#planetCanvas");
+  await canvas.scrollIntoViewIfNeeded();
+  await expect(canvas).toBeVisible();
+  const rect = await canvas.boundingBox();
+  expect(rect).not.toBeNull();
+  const x = rect.x + rect.width * 0.42;
+  const y = rect.y + rect.height * 0.42;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + rect.width * 0.12, y + rect.height * 0.11, { steps: 6 });
+  await page.mouse.up();
+  const angles = await page.evaluate(() => ({
+    yaw: Number(document.querySelector("#planetCanvas").dataset.rotationY),
+    pitch: Number(document.querySelector("#planetCanvas").dataset.rotationX),
+    dragging: document.querySelector("#planetCanvas").dataset.dragging
+  }));
+  expect(angles.yaw).toBeLessThan(0);
+  expect(angles.pitch).toBeGreaterThan(0);
+  expect(angles.dragging).toBeUndefined();
+});
