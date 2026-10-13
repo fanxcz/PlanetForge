@@ -78,6 +78,7 @@
   let terrainPaintAt = 0;
   let terrainStrokeBase = null;
   let terrainStrokeTarget = 0;
+  let terrainStrokeOverrideCount = 0;
   let exportMenu = null;
   let activeData = null;
   let stats = null;
@@ -1620,7 +1621,6 @@
     const data=activeData,{mode,radius,strength}=terrainBrushSettings(),height=data.heightField,base=terrainStrokeBase||height;
     const changed=new Set(),latitude=(90-(center.y+.5)/MAP_H*180)*Math.PI/180,cosLat=Math.max(.25,Math.cos(latitude));
     const yRadius=radius,xRadius=Math.ceil(radius/cosLat);
-    let overrideCount=Object.keys(state.customHeightOverrides).length;
     for(let oy=-yRadius;oy<=yRadius;oy++){
       const y=center.y+oy;if(y<0||y>=MAP_H)continue;
       for(let ox=-xRadius;ox<=xRadius;ox++){
@@ -1641,21 +1641,31 @@
         next=clamp(next,0,1.15);
         if(Math.abs(next-current)<.00005)continue;
         const key=String(index),wasStored=Object.prototype.hasOwnProperty.call(state.customHeightOverrides,key);
-        if(!wasStored&&overrideCount>=18000)continue;
-        height[index]=next;state.customHeightOverrides[key]=Number(next.toFixed(5));if(!wasStored)overrideCount++;
+        if(!wasStored&&terrainStrokeOverrideCount>=18000)continue;
+        height[index]=next;state.customHeightOverrides[key]=Number(next.toFixed(5));if(!wasStored)terrainStrokeOverrideCount++;
         changed.add(index);
       }
     }
-    if(changed.size){mapCanvas.dataset.terrainCellsChanged=String((Number(mapCanvas.dataset.terrainCellsChanged)||0)+changed.size);drawTexture();renderCurrentView();$("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";}
+    if(changed.size){
+      mapCanvas.dataset.terrainCellsChanged=String((Number(mapCanvas.dataset.terrainCellsChanged)||0)+changed.size);
+      if(!terrainStrokePointerBatch){drawTexture();renderCurrentView();}
+      $("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";
+    }
+    return changed.size;
   }
+  let terrainStrokePointerBatch=false;
   function paintTerrainSegment(start,end){
     if(!activeData||!state.editTerrain||state.view!=="map")return;
     let dx=end.x-start.x;if(dx>MAP_W/2)dx-=MAP_W;else if(dx< -MAP_W/2)dx+=MAP_W;
     const dy=end.y-start.y,steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))));
-    for(let step=0;step<=steps;step++){
-      const t=step/steps,x=((Math.round(start.x+dx*t)%MAP_W)+MAP_W)%MAP_W,y=clamp(Math.round(start.y+dy*t),0,MAP_H-1);
-      stampTerrainBrush({x,y});
-    }
+    let changed=0;terrainStrokePointerBatch=true;
+    try{
+      for(let step=0;step<=steps;step++){
+        const t=step/steps,x=((Math.round(start.x+dx*t)%MAP_W)+MAP_W)%MAP_W,y=clamp(Math.round(start.y+dy*t),0,MAP_H-1);
+        changed+=stampTerrainBrush({x,y});
+      }
+    }finally{terrainStrokePointerBatch=false;}
+    if(changed){drawTexture();renderCurrentView();}
   }
   function updatePaintedBorders(data,changed){
     const affected=new Set(),heightField=data.heightField,territories=data.territories,borders=data.borders,threshold=data.threshold;
@@ -1745,6 +1755,7 @@
       event.preventDefault();checkpointHistory();terrainPaintPointer=event.pointerId;lastTerrainPaintPoint=mapCellFromPoint(point);
       mapCanvas.dataset.terrainPointerStarted="true";
       terrainStrokeBase=activeData.heightField.slice();terrainStrokeTarget=activeData.heightField[lastTerrainPaintPoint.y*MAP_W+lastTerrainPaintPoint.x];
+      terrainStrokeOverrideCount=Object.keys(state.customHeightOverrides).length;
       terrainPaintAt=performance.now();mapCanvas.setPointerCapture(event.pointerId);paintTerrainSegment(lastTerrainPaintPoint,lastTerrainPaintPoint);return;
     }
     if(!state.editBorders||state.view!=="map"||event.button!==0)return;
