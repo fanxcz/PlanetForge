@@ -62,6 +62,8 @@
   let globeBufferSize = 0;
   let mapData = null;
   let textureRevision = 0;
+  let vectorBorderCacheRevision = -1;
+  let vectorBorderCache = null;
   let resizeObserver = null;
   let regenTimer = 0;
   let animationId = 0;
@@ -161,8 +163,10 @@
   }
   // Muted atlas colors distinguish countries without competing with terrain.
   const COUNTRY_COLORS = [
-    [105, 133, 125], [145, 133, 111], [105, 124, 151],
-    [158, 119, 105], [139, 143, 111], [135, 119, 146]
+    [103, 128, 112], [159, 133, 96], [91, 119, 146], [158, 111, 100],
+    [146, 146, 105], [133, 112, 143], [91, 137, 133], [172, 137, 124],
+    [112, 125, 91], [125, 141, 157], [176, 154, 103], [133, 126, 112],
+    [102, 141, 116], [158, 122, 139], [108, 131, 151], [169, 143, 114]
   ];
 
   function generateRivers(height,threshold,seed){
@@ -223,8 +227,8 @@
         }
         const temperatureFit = 1 - Math.min(1, Math.abs(t - 17) / 58);
         const moistureFit = 1 - Math.min(1, Math.abs(moisture[index] - 0.52) / 0.68);
-        const score = temperatureFit * 0.42 + moistureFit * 0.22 +
-          (nearCoast ? 0.15 : 0) + (nearRiver ? 0.19 : 0) + rand() * 0.48;
+        const score = temperatureFit * 0.34 + moistureFit * 0.20 +
+          (nearCoast ? 0.22 : 0) + (nearRiver ? 0.24 : 0) + rand() * 0.24;
         candidates.push({ x, y, index, latitude, longitude: ((x + 0.5) / MAP_W) * 360 - 180, score });
       }
     }
@@ -261,9 +265,20 @@
       return { x: cosLat * Math.cos(longitude), y: Math.sin(latitude), z: cosLat * Math.sin(longitude) };
     };
     const anchors = capitals.map((city, id) => ({ ...vectorFor(city.lat, city.lon), id, city }));
+    const warpTerritoryVector = (x, y, z) => {
+      const seed = Number(civilizationSeed) >>> 0;
+      const broad = noise3(x * 2.6, y * 2.6, z * 2.6, seed ^ 0x2c1b3c6d) - 0.5;
+      const detail = noise3(x * 4.1 + 11.7, y * 4.1 - 3.8, z * 4.1 + 6.2, seed ^ 0x5f356495) - 0.5;
+      const wx = x + broad * 0.34 + detail * 0.10;
+      const wy = y + detail * 0.20 - broad * 0.08;
+      const wz = z - broad * 0.14 + detail * 0.16;
+      const length = Math.hypot(wx, wy, wz) || 1;
+      return { x: wx / length, y: wy / length, z: wz / length };
+    };
     cities.forEach((city, i) => {
       city.type = i < countryCount ? "capital" : (i < countryCount + Math.max(2, Math.round(cities.length * 0.22)) ? "city" : "settlement");
-      const vector = vectorFor(city.lat, city.lon);
+      const raw = vectorFor(city.lat, city.lon);
+      const vector = warpTerritoryVector(raw.x, raw.y, raw.z);
       let bestDot = -Infinity;
       for (const anchor of anchors) {
         const dot = vector.x * anchor.x + vector.y * anchor.y + vector.z * anchor.z;
@@ -281,9 +296,10 @@
         if (height[index] <= threshold || anchors.length === 0) continue;
         const longitude = ((x + 0.5) / MAP_W) * Math.PI * 2 - Math.PI;
         const vx = latCos * Math.cos(longitude), vz = latCos * Math.sin(longitude);
+        const warped = warpTerritoryVector(vx, latSin, vz);
         let bestDot = -Infinity, bestId = 0;
         for (const anchor of anchors) {
-          const dot = vx * anchor.x + latSin * anchor.y + vz * anchor.z;
+          const dot = warped.x * anchor.x + warped.y * anchor.y + warped.z * anchor.z;
           if (dot > bestDot) { bestDot = dot; bestId = anchor.id; }
         }
         territories[index] = bestId;
@@ -563,17 +579,21 @@
           const up = Math.max(0, y - 1) * MAP_W + x;
           const down = Math.min(MAP_H - 1, y + 1) * MAP_W + x;
           const isCore = borders[i] !== 0;
-          const borderHalo = !isCore && (
-            borders[left] || borders[right] || borders[up] || borders[down]
-          );
+          const upLeft = Math.max(0, y - 1) * MAP_W + (x - 1 + MAP_W) % MAP_W;
+          const upRight = Math.max(0, y - 1) * MAP_W + (x + 1) % MAP_W;
+          const downLeft = Math.min(MAP_H - 1, y + 1) * MAP_W + (x - 1 + MAP_W) % MAP_W;
+          const downRight = Math.min(MAP_H - 1, y + 1) * MAP_W + (x + 1) % MAP_W;
+          const neighbors = [left, right, up, down, upLeft, upRight, downLeft, downRight];
+          const neighborCount = neighbors.reduce((count, index) => count + (borders[index] ? 1 : 0), 0);
+          const borderHalo = !isCore && neighborCount > 0;
           if (isCore) {
-            const mix = state.layer === "political" ? 0.86 : 0.54;
+            const mix = state.layer === "political" ? 0.52 : 0.32;
             const edge = state.layer === "political" ? [229, 219, 196] : [194, 204, 192];
             color[0] = Math.round(lerp(color[0], edge[0], mix));
             color[1] = Math.round(lerp(color[1], edge[1], mix));
             color[2] = Math.round(lerp(color[2], edge[2], mix));
           } else if (borderHalo) {
-            const mix = state.layer === "political" ? 0.9 : 0.57;
+            const mix = (state.layer === "political" ? 0.10 : 0.055) + neighborCount * 0.018;
             const casing = state.layer === "political" ? [24, 30, 32] : [22, 31, 32];
             color[0] = Math.round(lerp(color[0], casing[0], mix));
             color[1] = Math.round(lerp(color[1], casing[1], mix));
@@ -622,14 +642,14 @@
       return;
     }
     const glow = ctx.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius * 1.25);
-    glow.addColorStop(0, "rgba(38,123,142,.13)");
-    glow.addColorStop(.72, "rgba(29,94,132,.075)");
+    glow.addColorStop(0, "rgba(105,119,100,.09)");
+    glow.addColorStop(.72, "rgba(103,121,130,.035)");
     glow.addColorStop(1, "rgba(29,94,132,0)");
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(cx, cy, radius * 1.3, 0, TAU); ctx.fill();
     const halo = ctx.createRadialGradient(cx - radius * .25, cy - radius * .35, radius * .08, cx, cy, radius * 1.08);
-    halo.addColorStop(0, "rgba(90,210,225,.15)");
-    halo.addColorStop(.82, "rgba(80,166,206,.04)");
+    halo.addColorStop(0, "rgba(171,183,158,.075)");
+    halo.addColorStop(.82, "rgba(113,132,137,.025)");
     halo.addColorStop(1, "rgba(82,172,219,0)");
     ctx.fillStyle = halo;
     ctx.beginPath(); ctx.arc(cx, cy, radius * 1.08, 0, TAU); ctx.fill();
@@ -715,7 +735,7 @@
     const outH = outW / ratio;
     mapCtx.imageSmoothingEnabled = true;
     mapCtx.drawImage(textureCanvas, (w - outW) / 2, (h - outH) / 2, outW, outH);
-    mapCtx.strokeStyle = "rgba(173,207,220,.12)";
+    mapCtx.strokeStyle = "rgba(190,198,180,.08)";
     mapCtx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
       const x = (w - outW) / 2 + outW * i / 6;
@@ -725,9 +745,103 @@
       const y = (h - outH) / 2 + outH * i / 4;
       mapCtx.beginPath(); mapCtx.moveTo((w - outW) / 2, y); mapCtx.lineTo((w + outW) / 2, y); mapCtx.stroke();
     }
-    mapCtx.strokeStyle = "rgba(173,207,220,.22)";
+    mapCtx.strokeStyle = "rgba(190,198,180,.16)";
     mapCtx.strokeRect((w - outW) / 2, (h - outH) / 2, outW, outH);
+    drawPoliticalBorders(w, h, outW, outH);
     drawCivilizationMap(w, h, outW, outH);
+  }
+
+  function buildBoundaryPolylines(edges) {
+    const nodes = new Map();
+    const keyFor = point => point[0] + "," + point[1];
+    const edgeNodes = [];
+    edges.forEach((edge, id) => {
+      const a = keyFor(edge[0]), b = keyFor(edge[1]);
+      edgeNodes[id] = [a, b];
+      for (const [key, point] of [[a, edge[0]], [b, edge[1]]]) {
+        if (!nodes.has(key)) nodes.set(key, { point, edges: [] });
+        nodes.get(key).edges.push(id);
+      }
+    });
+    const used = new Uint8Array(edges.length), paths = [];
+    function trace(startKey, firstEdge) {
+      const points = [nodes.get(startKey).point];
+      let currentKey = startKey, edgeId = firstEdge, guard = 0;
+      while (edgeId !== undefined && !used[edgeId] && guard++ <= edges.length) {
+        used[edgeId] = 1;
+        const [a, b] = edgeNodes[edgeId], nextKey = a === currentKey ? b : a;
+        points.push(nodes.get(nextKey).point);
+        if (nextKey === startKey) break;
+        const nextNode = nodes.get(nextKey);
+        if (nextNode.edges.length !== 2) break;
+        const nextEdge = nextNode.edges.find(id => !used[id]);
+        if (nextEdge === undefined) break;
+        currentKey = nextKey; edgeId = nextEdge;
+      }
+      if (points.length > 1) paths.push(points);
+    }
+    for (const [key, node] of nodes) {
+      if (node.edges.length === 2) continue;
+      for (const edgeId of node.edges) if (!used[edgeId]) trace(key, edgeId);
+    }
+    for (let edgeId = 0; edgeId < edges.length; edgeId++) if (!used[edgeId]) trace(edgeNodes[edgeId][0], edgeId);
+    return paths;
+  }
+
+  function buildPoliticalBoundaryPaths(data) {
+    const { heightField, territories, threshold } = data;
+    if (!heightField || !territories) return [];
+    const edges = [];
+    const addEdge = (x1, y1, x2, y2) => edges.push([[x1, y1], [x2, y2]]);
+    const isLand = index => heightField[index] > threshold && territories[index] !== 255;
+    for (let y = 0; y < MAP_H; y++) {
+      const row = y * MAP_W, nextRow = Math.min(MAP_H - 1, y + 1) * MAP_W;
+      for (let x = 0; x < MAP_W; x++) {
+        const index = row + x;
+        if (!isLand(index)) continue;
+        const right = row + (x + 1) % MAP_W;
+        if (isLand(right) && territories[right] !== territories[index]) {
+          addEdge(x + 1, y, x + 1, y + 1);
+          if (x === MAP_W - 1) addEdge(0, y, 0, y + 1);
+        }
+        if (y + 1 < MAP_H) {
+          const down = nextRow + x;
+          if (isLand(down) && territories[down] !== territories[index]) addEdge(x, y + 1, x + 1, y + 1);
+        }
+      }
+    }
+    return buildBoundaryPolylines(edges);
+  }
+
+  function drawPoliticalBorders(w, h, outW, outH) {
+    if (!activeData || (!state.showBorders && state.layer !== "political")) return;
+    if (vectorBorderCacheRevision !== textureRevision) {
+      vectorBorderCache = buildPoliticalBoundaryPaths(activeData);
+      vectorBorderCacheRevision = textureRevision;
+    }
+    if (!vectorBorderCache || !vectorBorderCache.length) return;
+    const dpr = window.devicePixelRatio || 1, left = (w - outW) / 2, top = (h - outH) / 2;
+    const drawPaths = () => {
+      mapCtx.beginPath();
+      for (const points of vectorBorderCache) {
+        const point = p => ({ x: left + p[0] / MAP_W * outW, y: top + p[1] / MAP_H * outH });
+        const first = point(points[0]), last = point(points[points.length - 1]);
+        mapCtx.moveTo(first.x, first.y);
+        if (points.length === 2) { mapCtx.lineTo(last.x, last.y); continue; }
+        for (let i = 1; i < points.length - 1; i++) {
+          const current = point(points[i]), next = point(points[i + 1]);
+          mapCtx.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+        }
+        mapCtx.lineTo(last.x, last.y);
+      }
+      mapCtx.stroke();
+    };
+    mapCtx.save();
+    mapCtx.lineCap = "round"; mapCtx.lineJoin = "round";
+    mapCtx.strokeStyle = "rgba(15, 20, 17, .88)"; mapCtx.lineWidth = 2.15 * dpr; drawPaths();
+    mapCtx.strokeStyle = state.layer === "political" ? "rgba(229, 219, 196, .96)" : "rgba(194, 204, 192, .82)";
+    mapCtx.lineWidth = (state.layer === "political" ? 1.05 : .78) * dpr; drawPaths();
+    mapCtx.restore();
   }
 
   function drawCivilizationGlobe(cx, cy, radius) {
@@ -747,7 +861,7 @@
     ctx.save();
     if (state.showRoutes) {
       ctx.lineWidth = 1.25 * dpr;
-      ctx.strokeStyle = "rgba(106, 221, 214, .62)";
+      ctx.strokeStyle = "rgba(195, 181, 139, .48)";
       ctx.setLineDash([3.5 * dpr, 3 * dpr]);
       ctx.beginPath();
       for (const route of activeData.routes || []) {
@@ -762,7 +876,7 @@
         const city = point.city, capital = city.type === "capital";
         const size = (capital ? 3.6 : city.type === "city" ? 2.8 : 2.1) * dpr;
         ctx.beginPath();
-        ctx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
+        ctx.fillStyle = capital ? "#d8c49a" : city.type === "city" ? "#b7c5ba" : "#aeb8b2";
         ctx.shadowColor = capital ? "rgba(103,255,219,.95)" : "rgba(109,220,238,.6)";
         ctx.shadowBlur = (capital ? 9 : 4) * dpr;
         ctx.arc(point.x, point.y, size, 0, TAU);
@@ -776,7 +890,7 @@
           ctx.textAlign = "left"; ctx.textBaseline = "middle";
           ctx.lineWidth = 3 * dpr; ctx.strokeStyle = "rgba(4,12,22,.92)";
           ctx.strokeText(city.name, point.x + 6 * dpr, point.y - 5 * dpr);
-          ctx.fillStyle = "#e2f5ff";
+          ctx.fillStyle = "#e2e4d9";
           ctx.fillText(city.name, point.x + 6 * dpr, point.y - 5 * dpr);
         }
       }
@@ -795,7 +909,7 @@
     }]));
     mapCtx.save();
     if (state.showRoutes) {
-      mapCtx.strokeStyle = "rgba(103, 224, 211, .78)";
+      mapCtx.strokeStyle = "rgba(195, 181, 139, .64)";
       mapCtx.lineWidth = 1.15 * dpr;
       mapCtx.setLineDash([4 * dpr, 3 * dpr]);
       mapCtx.beginPath();
@@ -811,14 +925,14 @@
         const city = point.city, capital = city.type === "capital";
         const size = (capital ? 3.2 : city.type === "city" ? 2.4 : 1.7) * dpr;
         mapCtx.beginPath();
-        mapCtx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
+        mapCtx.fillStyle = capital ? "#d8c49a" : city.type === "city" ? "#b7c5ba" : "#aeb8b2";
         mapCtx.arc(point.x, point.y, size, 0, TAU); mapCtx.fill();
         if (capital || city.type === "city") {
           mapCtx.font = (9 * dpr) + "px ui-monospace, SFMono-Regular, monospace";
           mapCtx.textAlign = "left"; mapCtx.textBaseline = "middle";
           mapCtx.lineWidth = 3 * dpr; mapCtx.strokeStyle = "rgba(4,12,22,.92)";
           mapCtx.strokeText(city.name, point.x + 5 * dpr, point.y - 4 * dpr);
-          mapCtx.fillStyle = "#e2f5ff"; mapCtx.fillText(city.name, point.x + 5 * dpr, point.y - 4 * dpr);
+          mapCtx.fillStyle = "#e2e4d9"; mapCtx.fillText(city.name, point.x + 5 * dpr, point.y - 4 * dpr);
         }
       }
     }
@@ -952,7 +1066,7 @@
       heightmap: [['Минимальная высота','#252525'],['Низина','#696969'],['Плато','#adadad'],['Горы','#e2e2e2']],
       tectonics: [['Спокойная кора','#1f4250'],['Плиты','#467874'],['Сжатие','#b58b55'],['Активная граница','#ef463f']],
       hydrology: [['Океан','#12375a'],['Озёра','#2a7faa'],['Дельты','#58b6a0'],['Реки','#4bc9e5'],['Возвышенность','#a28b67']],
-      political: [['Территория A','#378494'],['Территория B','#7767ac'],['Территория C','#a97943'],['Границы','#c4e1e3'],['Поселения','#a6ffe5']]
+      political: [['Территория A','#378494'],['Территория B','#7767ac'],['Территория C','#a97943'],['Границы','#c4e1e3'],['Поселения','#d8c49a']]
     };
     $("mapLegend").innerHTML = labels[state.layer].map(([label,color]) => '<span><i class="legend-color" style="background:' + color + '"></i>' + label + '</span>').join("");
   }
@@ -1032,8 +1146,8 @@
     const out=output.getContext("2d");out.drawImage(sourceTexture,0,0,output.width,output.height);
     const points=new Map((renderData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
     const includeOverlays=!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer);
-    if(includeOverlays&&renderState.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
-    if(includeOverlays&&renderState.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
+    if(includeOverlays&&renderState.showRoutes){out.strokeStyle="rgba(195,181,139,.72)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
+    if(includeOverlays&&renderState.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#d8c49a":city.type==="city"?"#b7c5ba":"#aeb8b2";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2e4d9";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
     output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(renderState.name)+"-"+scale+"x-"+renderState.layer+".png");$("statusText").textContent="Экспорт готов";showToast("PNG экспортирован: "+output.width+" × "+output.height);}else showToast("Не удалось экспортировать PNG");},"image/png");
   }
   function exportNativePNG(scale){

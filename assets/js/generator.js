@@ -14,7 +14,7 @@ function noise3(x,y,z,seed){
 function fbm3(x,y,z,frequency,octaves,seed){let amp=.5,total=0,weight=0;for(let i=0;i<octaves;i++){total+=noise3(x*frequency,y*frequency,z*frequency,seed+i*1013)*amp;weight+=amp;frequency*=2;amp*=.5;}return total/weight;}
 function seededRandom(seed){let x=seed>>>0;return()=>{x+=0x6D2B79F5;let t=x;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
 const BIOME_COLORS=[[16,48,82],[31,105,137],[74,133,158],[213,237,239],[142,166,151],[144,151,147],[194,151,83],[161,170,91],[105,157,91],[49,119,78],[27,91,71],[58,111,105]];
-const COUNTRY_COLORS=[[55,132,148],[119,103,172],[169,121,67],[73,142,105],[170,88,103],[76,119,173]];
+const COUNTRY_COLORS=[[103,128,112],[159,133,96],[91,119,146],[158,111,100],[146,146,105],[133,112,143],[91,137,133],[172,137,124],[112,125,91],[125,141,157],[176,154,103],[133,126,112],[102,141,116],[158,122,139],[108,131,151],[169,143,114]];
 const HEIGHT_STOPS=[[0,[8,25,51]],[.30,[17,55,88]],[.48,[40,117,137]],[.50,[52,117,108]],[.56,[88,142,90]],[.64,[143,157,91]],[.73,[166,129,88]],[.84,[137,105,92]],[.94,[178,184,177]],[1,[246,250,247]]];
 const TEMP_STOPS=[[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179,203,143]],[.64,[228,196,105]],[.8,[217,125,77]],[1,[151,55,62]]];
 const MOIST_STOPS=[[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
@@ -68,7 +68,7 @@ function generateFields(config){
   const lat=Math.PI/2-((y+.5)/H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat);
   for(let x=0;x<W;x++){
    const lon=((x+.5)/W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon);
-   const continent=fbm3(sx,sy,sz,2.25,3,seed+11),detail=fbm3(sx,sy,sz,6.6,2,seed+271),fine=noise3(sx*13.1,sy*13.1,sz*13.1,seed+701);
+   const continent=fbm3(sx,sy,sz,1.65,4,seed+11),detail=fbm3(sx,sy,sz,5.4,3,seed+271),fine=noise3(sx*11.6,sy*11.6,sz*11.6,seed+701);
    let best=-Infinity,second=-Infinity,bestIndex=0,secondIndex=0;
    for(let p=0;p<plates.length;p++){const plate=plates[p],dot=sx*plate.x+sy*plate.y+sz*plate.z;if(dot>best){second=best;secondIndex=bestIndex;best=dot;bestIndex=p;}else if(dot>second){second=dot;secondIndex=p;}}
    const boundary=clamp(1-(best-second)*26,0,1),primary=plates[bestIndex],neighbour=plates[secondIndex];
@@ -77,7 +77,7 @@ function generateFields(config){
    if(primary.continental&&neighbour.continental)stress=.085;
    else if(primary.continental!==neighbour.continental)stress=primary.continental ? .052 : -.045;
    else stress=primary.mode===0 ? .058 : primary.mode===1 ? -.047 : .008;
-   height[y*W+x]=continent*.68+detail*.24+fine*.08+boundary*stress*tectonics;
+   height[y*W+x]=continent*.70+detail*.23+fine*.07+boundary*stress*tectonics;
   }
  }
  if(erosion>.001){

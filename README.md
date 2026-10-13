@@ -82,13 +82,13 @@ PlanetForge/
 
 ## Technical notes
 
-- The editor uses local system fonts and a flat cartography-workstation style instead of downloading fonts from a third-party CDN.
+- The editor uses local system fonts and a muted, flat cartographic palette instead of downloading fonts from a third-party CDN. Political borders use a smoothed vector overlay on the world map and a softened contrast treatment on the globe texture.
 
 - Plain HTML, CSS, and JavaScript. Terrain fields are generated in a Web Worker when supported, with a deterministic synchronous fallback. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
 - A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
 - Latitude, elevation, orbital season, temperature, terrain-aware moisture, coastal moderation, and stylized prevailing-wind/rain-shadow effects feed into the biome classifier.
 - The globe uses an equirectangular texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays.
-- River drainage uses a priority-flood approximation; boundaries use nearest-capital spherical regions. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
+- River drainage uses a priority-flood approximation. Political territories start from spherical capital regions, then receive a deterministic low-frequency spherical warp to avoid diagram-like arcs; the equirectangular map draws shared boundaries as smoothed vector paths. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
 - Seed-based world generation is deterministic for a given version and set of settings. Future generator changes may intentionally change the resulting surface.
 - Climate and physical values are **procedural estimates for fictional worlds**, not a validated climate or planetary-science simulation.
 

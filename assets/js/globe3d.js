@@ -41,18 +41,18 @@ void main(){
   float diffuse=max(dot(n,lightDir),0.),shade=.18+diffuse*.9;
   float oceanMask=smoothstep(.025,.25,tex.b-tex.r*.65);
   float specular=pow(max(dot(reflect(-lightDir,n),vec3(0.,0.,1.)),0.),30.)*oceanMask*.22;
-  vec3 color=tex*shade+vec3(.33,.63,.8)*specular;
+  vec3 color=tex*shade+vec3(.24,.39,.42)*specular;
   float edge=smoothstep(0.,.035,n.z+.025);gl_FragColor=vec4(color,edge);
  }else if(uMode<1.5){
   vec3 p=n*7.5+vec3(uSeed*.013,uTime*.018,uTime*.006);float clouds=cloudNoise(p);
   float alpha=smoothstep(.54,.72,clouds)*.36*smoothstep(-.2,.32,n.z);
-  vec3 light=vec3(.76,.87,.96)*(.72+max(dot(n,normalize(vec3(-.42,.31,.852))),0.)*.28);
+  vec3 light=vec3(.78,.80,.75)*(.72+max(dot(n,normalize(vec3(-.42,.31,.852))),0.)*.28);
   gl_FragColor=vec4(light,alpha);
  }else{
   float facing=max(n.z,0.),rim=pow(1.-facing,2.35);
   float night=1.-smoothstep(-.05,.3,dot(n,normalize(vec3(-.42,.31,.852))));
-  float alpha=clamp(rim*.62+pow(rim,4.)*.20,0.,.78);
-  vec3 atmosphere=mix(vec3(.14,.38,.75),vec3(.2,.88,.92),clamp(rim*1.4,0.,1.));
+  float alpha=clamp(rim*.48+pow(rim,4.)*.14,0.,.78);
+  vec3 atmosphere=mix(vec3(.20,.32,.43),vec3(.43,.62,.52),clamp(rim*1.4,0.,1.));
   gl_FragColor=vec4(atmosphere*(1.-night*.15),alpha);
  }
 }`;
