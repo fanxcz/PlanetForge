@@ -108,3 +108,8 @@ The project is released under the MIT License. See [LICENSE](LICENSE).
 
 
 The resource pack is a self-contained ZIP archive generated without external packages. It contains eight PNG map layers, project JSON, biome statistics, and city/trade-route geography.
+
+
+## Automated tests
+
+Run deterministic generator and static integration checks with `npm run test:smoke`. Run browser end-to-end tests with `npm install`, `npx playwright install chromium`, and `npm run test:e2e`. CI installs Chromium and verifies view switching, terrain brush persistence with Undo/Redo, gallery filters, local snapshots, and ZIP resource exports.

@@ -49,6 +49,8 @@ assert.ok(js.includes("lakeMask")&&js.includes("deltaMask"),"Procedural lake/del
 assert.ok(js.includes("function scheduleAutosave(")&&js.includes("function readAutosave(")&&js.includes("AUTOSAVE_KEY"),"Local auto-save / restore missing");
 assert.ok(js.includes("function comparisonStats(")&&js.includes("function renderComparison("),"Planet comparison is incomplete");
 assert.ok(js.includes("function renderGalleryWorlds(")&&js.includes("GALLERY_WORLDS.length"),"Searchable categorized gallery is missing");
+assert.ok(js.includes("world.revision")&&js.includes("snapshot-version"),"Numbered local snapshots are missing");
+assert.ok(js.includes("function renderGalleryWorlds(")&&js.includes("GALLERY_WORLDS.length"),"Searchable categorized gallery is missing");
 assert.ok(js.includes("world.revision")&&js.includes("snapshot-version"),"Numbered local save snapshots are missing");
 assert.ok(generator.includes("lakeMask")&&generator.includes("deltaMask"),"High-resolution export must include lake/delta overlays");
 
@@ -88,7 +90,7 @@ assert.notDeepEqual(Array.from(winter.temperature),Array.from(summer.temperature
 const quietPlates=globalThis.PlanetForgeGenerator.generateFields({...config,tectonics:0});
 assert.notDeepEqual(Array.from(quietPlates.heightField),Array.from(a.heightField),"Tectonic activity should affect terrain elevation");
 const overrideIndex=24*96+48,sculpted=globalThis.PlanetForgeGenerator.generateFields({...config,heightOverrides:{[overrideIndex]:1.02}});
-assert.equal(sculpted.heightField[overrideIndex],1.02,"Manual elevation overrides must survive generation");
+assert.ok(Math.abs(sculpted.heightField[overrideIndex]-1.02)<0.00001,"Manual elevation override must survive Float32 storage");
 assert.notEqual(sculpted.temperature[overrideIndex],a.temperature[overrideIndex],"Edited elevation must recalculate temperature");
 assert.ok(sculpted.counts.reduce((sum,n)=>sum+n,0)===96*48,"Edited terrain must be reclassified into biome counts");
 assert.ok(Math.max(...sculpted.heightField)<=1.15,"Terrain override must be clamped");

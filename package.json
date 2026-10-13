@@ -1,0 +1,13 @@
+{
+  "name": "planetforge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:e2e": "playwright test",
+    "test": "npm run test:smoke && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

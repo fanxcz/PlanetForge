@@ -25,6 +25,17 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install test tools
+        run: npm install --no-audit --no-fund
+
+      - name: Install browser for end-to-end tests
+        run: npx playwright install --with-deps chromium
+
       - name: Validate JavaScript syntax
         run: |
           node --check assets/js/app.js
@@ -35,8 +46,8 @@ jobs:
           node --check assets/js/history.js
           node --check assets/js/share.js
 
-      - name: Run static smoke tests
-        run: node scripts/smoke-test.mjs
+      - name: Run generator smoke and browser end-to-end tests
+        run: npm test
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
