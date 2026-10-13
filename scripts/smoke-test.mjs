@@ -33,6 +33,7 @@ assert.ok(generator.includes("tectonicField")&&generator.includes('layer==="tect
 assert.ok(worker.includes("fields.tectonicField.buffer"),"Worker must transfer the tectonic field");
 assert.ok(js.includes("function exportHeightmapPNG(")&&js.includes('data-export="heightmap"'),"Heightmap game-asset export is missing");
 assert.ok(js.includes("function exportResourcePackZip(")&&js.includes("function zipStoredFiles(")&&js.includes('data-export="zip"'),"Complete ZIP resource pack export is missing");
+for(const asset of ["heightmap16.raw","normal-map.png","biome-index.png","land-water-mask.png","planetforge-manifest.json","function buildHeightmap16Raw(","function buildNormalMapPixels(","function buildBiomeIndexPixels("])assert.ok(js.includes(asset),"Missing game-engine export asset "+asset);
 assert.ok(js.includes("function applyCustomTerritories(")&&js.includes("function paintBorderSegment(")&&js.includes("state.customTerritories"),"Editable persistent political borders are incomplete");
 assert.ok(historyModule.includes("undoStack")&&historyModule.includes("redoStack"),"Undo/redo module incomplete");
 assert.ok(shareModule.includes("createURL")&&shareModule.includes("readFromLocation"),"Share-link module incomplete");

@@ -21,7 +21,7 @@
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
 - **Curated world gallery:** six named example planets with fixed seeds and distinct presets; examples can be opened, edited, saved, and shared entirely offline.
-- **Game asset export:** grayscale heightmap PNG, 2048×1024 and 4096×2048 individual map layers, or a full ZIP pack with eight 512×256 PNG layers, project JSON, biome-statistics CSV, and city/trade-route CSV. Pack rendering runs in a Worker and reuses one field generation for all layers.
+- **Game asset export:** grayscale heightmap preview, 2K/4K individual layers, or a full ZIP pack with eight thematic PNG layers, 16-bit big-endian RAW elevation, tangent-space normal map, biome-ID and land/water masks, manifest metadata, project JSON, and CSV statistics/geography. Pack rendering runs in a Worker and reuses one field generation for all layers.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
 - **Surface statistics:** land/water ratio, estimated mean temperature, biome distribution, river-channel cells, lake basins, delta cells, settlement count, and generated planetary properties.
@@ -29,7 +29,7 @@
 - **Civilization generator:** settlements favor habitable land near rivers and coasts; capitals define spherical territories, and trade routes connect towns within a state.
 - **Optional overlays:** toggle rivers, lakes, deltas, cities, trade routes, and national boundaries independently; regenerate civilizations without rebuilding the planet.
 - **Local auto-save and compare:** the latest draft is restored on the next visit; compare the active world with a saved world or curated gallery entry on the same 128 × 64 preview grid.
-- **Export:** native-resolution PNG, portable JSON project, CSV biome statistics, and city/trade-route geography CSV.
+- **Export:** native-resolution PNG, portable JSON project, CSV biome statistics/geography, and a game-ready ZIP with RAW16 height data, normal map, masks, and import metadata.
 - **Import and local archive:** save and load projects in the browser's local storage.
 - **Responsive layout** for desktop, tablet, and mobile screens.
 - **Privacy-first:** world generation happens in the browser. Saved worlds and auto-saves are not sent to a server. The gallery is a curated offline set, not a crowdsourced public gallery.

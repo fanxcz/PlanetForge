@@ -400,7 +400,8 @@
       temperature: Number(state.temperature), humidity: Number(state.humidity), relief: Number(state.relief),
       tectonics: Number(state.tectonics), erosion: Number(state.erosion), season: Number(state.season),
       seaLevel: Number(state.seaLevel), landmass: Number(state.landmass),
-      heightOverrides: state.customHeightOverrides
+      heightOverrides: state.customHeightOverrides,
+      heightOverrideWidth: MAP_W, heightOverrideHeight: MAP_H
     };
   }
 
@@ -950,7 +951,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="heightmap"><span>HM</span><i><b>Heightmap PNG · 512 × 256</b><small>Grayscale высот для игрового движка</small></i></button><button data-export="zip"><span>ZIP</span><i><b>Полный набор ресурсов</b><small>8 карт, JSON проекта и CSV-данные</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="heightmap"><span>HM</span><i><b>Heightmap PNG · 512 × 256</b><small>8-bit preview</small></i></button><button data-export="zip"><span>ZIP</span><i><b>Полный набор ресурсов</b><small>8 карт, JSON проекта и CSV-данные</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
@@ -1098,6 +1099,34 @@
     for(const route of activeData.routes||[])lines.push(["trade_route","","","","",route.countryId,route.from,route.to,""].join(","));
     return "\uFEFF"+lines.join("\r\n");
   }
+  function buildHeightmap16Raw(){
+    const field=activeData.heightField;let min=Infinity,max=-Infinity;
+    for(const value of field){if(value<min)min=value;if(value>max)max=value;}
+    const range=Math.max(1e-9,max-min),bytes=new Uint8Array(field.length*2),view=new DataView(bytes.buffer);
+    for(let i=0;i<field.length;i++)view.setUint16(i*2,Math.round(clamp((field[i]-min)/range,0,1)*65535),false);
+    return{bytes,min,max,seaLevelSample:Math.round(clamp((activeData.threshold-min)/range,0,1)*65535)};
+  }
+  function buildNormalMapPixels(){
+    const field=activeData.heightField,pixels=new Uint8ClampedArray(field.length*4);
+    for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){
+      const i=y*MAP_W+x,left=y*MAP_W+(x-1+MAP_W)%MAP_W,right=y*MAP_W+(x+1)%MAP_W;
+      const up=Math.max(0,y-1)*MAP_W+x,down=Math.min(MAP_H-1,y+1)*MAP_W+x;
+      let nx=(field[left]-field[right])*18,ny=(field[up]-field[down])*18,nz=1;
+      const length=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=length;ny/=length;nz/=length;
+      const p=i*4;pixels[p]=Math.round((nx*.5+.5)*255);pixels[p+1]=Math.round((ny*.5+.5)*255);pixels[p+2]=Math.round((nz*.5+.5)*255);pixels[p+3]=255;
+    }
+    return pixels;
+  }
+  function buildBiomeIndexPixels(){
+    const pixels=new Uint8ClampedArray(activeData.biome.length*4);
+    for(let i=0;i<activeData.biome.length;i++){const p=i*4;pixels[p]=activeData.biome[i];pixels[p+1]=0;pixels[p+2]=0;pixels[p+3]=255;}
+    return pixels;
+  }
+  function buildLandWaterMaskPixels(){
+    const pixels=new Uint8ClampedArray(activeData.heightField.length*4);
+    for(let i=0;i<activeData.heightField.length;i++){const value=activeData.heightField[i]>activeData.threshold?255:0,p=i*4;pixels[p]=pixels[p+1]=pixels[p+2]=value;pixels[p+3]=255;}
+    return pixels;
+  }
   async function exportResourcePackZip(){
     if(!activeData){showToast("Мир ещё не готов к экспорту");return;}
     if(exportWorker){exportWorker.terminate();exportWorker=null;}
@@ -1115,16 +1144,37 @@
       exportWorker=null;worker.terminate();
       if(result.error||!Array.isArray(result.layers)){showToast("Не удалось сгенерировать карты для архива");return;}
       try{
-        const encoder=new TextEncoder(),entries=[
+        const encoder=new TextEncoder(),elevation16=buildHeightmap16Raw();
+        const [normalPNG,biomeIndexPNG,landWaterPNG]=await Promise.all([
+          canvasPNGBytes(MAP_W,MAP_H,buildNormalMapPixels()),
+          canvasPNGBytes(MAP_W,MAP_H,buildBiomeIndexPixels()),
+          canvasPNGBytes(MAP_W,MAP_H,buildLandWaterMaskPixels())
+        ]);
+        const manifest={
+          format:"planetforge-resource-pack",version:1,worldName:state.name,seed:Number(state.seed),
+          resolution:{width:MAP_W,height:MAP_H},projection:"equirectangular",
+          orientation:{row0:"90 degrees north",column0:"180 degrees west",longitudeWrap:true},
+          heightmap16:{file:"heightmap16.raw",sampleType:"unsigned 16-bit integer",byteOrder:"big-endian",normalization:"(elevation-min)/(max-min)",min:elevation16.min,max:elevation16.max,seaLevelSample:elevation16.seaLevelSample},
+          normalMap:{file:"normal-map.png",channels:"RGB tangent-space normal; +X east, +Y north, +Z outward"},
+          biomeIndex:{file:"biome-index.png",channel:"R contains biome ID",biomes:BIOMES.map((biome,id)=>({id,name:biome.name}))},
+          landWaterMask:{file:"land-water-mask.png",channel:"RGB; white=land, black=water"},
+          terrain:{seaLevelThreshold:activeData.threshold,manualHeightCells:Object.keys(state.customHeightOverrides).length}
+        };
+        const entries=[
           {name:"planetforge-world.json",bytes:encoder.encode(project)},
+          {name:"planetforge-manifest.json",bytes:encoder.encode(JSON.stringify(manifest,null,2))},
           {name:"biome-statistics.csv",bytes:encoder.encode(biomeCSV)},
           {name:"cities-and-trade-routes.csv",bytes:encoder.encode(geographyCSV)},
-          {name:"README.txt",bytes:encoder.encode("PlanetForge resource pack\n\nEight PNG layers use one deterministic field generation.\nheightmap.png is grayscale elevation.\ntectonics.png shows procedural plate-boundary activity.\nAll files are generated locally in the browser.\n")}
+          {name:"heightmap16.raw",bytes:elevation16.bytes},
+          {name:"normal-map.png",bytes:normalPNG},
+          {name:"biome-index.png",bytes:biomeIndexPNG},
+          {name:"land-water-mask.png",bytes:landWaterPNG},
+          {name:"README.txt",bytes:encoder.encode("PlanetForge resource pack\n\nEight thematic PNG layers plus RAW16 elevation, tangent-space normals, a biome-ID mask and a land/water mask.\nRead planetforge-manifest.json for coordinate orientation, value ranges, sea level and biome IDs.\nRAW16 values are unsigned big-endian samples normalized linearly to the elevation range.\nAll files are generated locally in the browser.\n")}
         ];
         for(const layer of result.layers)entries.push({name:layer.layer+".png",bytes:await canvasPNGBytes(layer.width,layer.height,layer.pixels)});
         const zip=zipStoredFiles(entries);
         downloadBlob(new Blob([zip],{type:"application/zip"}),cleanFileName(state.name)+"-planetforge-resources.zip");
-        $("statusText").textContent="Архив ресурсов готов";showToast("ZIP готов: 8 PNG-карт, JSON и CSV");
+        $("statusText").textContent="Архив ресурсов готов";showToast("ZIP готов: 12 карт/масок, RAW16, manifest, JSON и CSV");
       }catch(error){console.error(error);$("statusText").textContent="Ошибка архива";showToast("Не удалось упаковать ресурсы в ZIP");}
     };
     worker.postMessage({jobId,settings,layers,options});
