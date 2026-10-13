@@ -25,6 +25,9 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      - name: Validate JavaScript syntax
+        run: node --check assets/js/app.js
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
