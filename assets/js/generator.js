@@ -53,7 +53,7 @@ function generateFields(config){
   const lat=Math.PI/2-((y+.5)/H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat),absLat=Math.abs(lat*180/Math.PI);
   for(let x=0;x<W;x++){
    const lon=((x+.5)/W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon),idx=y*W+x;
-   const h=height[idx],alt=h-threshold,seasonal=Math.sin(seasonPhase)*Math.sin(lat)*12;
+   const h=height[idx],alt=h-threshold,seasonal=-Math.cos(seasonPhase)*Math.sin(lat)*12;
    const t=30-absLat*.48+tempOffset+seasonal-Math.max(0,alt)*130,rain=fbm3(sx,sy,sz,4.7,2,seed+1907);
    const east=height[y*W+(x+2)%W],west=height[y*W+(x-2+W)%W],windward=clamp(.5+(east-west)*1.8,0,1);
    const wet=clamp(humidity*.58+rain*.25+(1-Math.abs(latSin))*.15+windward*.12-Math.max(0,alt)*.18,0,1);

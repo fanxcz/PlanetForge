@@ -18,7 +18,7 @@
 - **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
-- **High-resolution exports:** PNG 512×256, 2048×1024, 4096×2048, plus geography CSV.
+- **PNG export sizes:** 512×256, 2048×1024, or 4096×2048. Larger sizes currently upscale the 512×256 rendered surface texture; they change image dimensions, not the underlying terrain detail. Geography can be exported as CSV.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
 - **Surface statistics:** land/water ratio, estimated mean temperature, biome distribution, river-channel cells, settlement count, and generated planetary properties.

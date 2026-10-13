@@ -28,7 +28,8 @@ assert.ok(shareModule.includes("createURL")&&shareModule.includes("readFromLocat
 assert.ok(html.includes('value="hydrology"')&&html.includes('value="political"'),"Map layers missing");
 assert.ok(html.includes("assets/js/globe3d.js")&&html.includes("assets/js/history.js")&&html.includes("assets/js/share.js")&&html.includes("assets/js/generator.js"),"Scripts aren't loaded");
 assert.ok(css.includes("#globe3dCanvas")&&css.includes(".history-button"),"Editor styles missing");
-assert.ok(js.includes("Math.sin")&&js.includes("generateFields")&&js.includes("filledHeight"),"Terrain/hydrology model missing");
+assert.ok(gen.includes("seasonal=-Math.cos(seasonPhase)")&&js.includes("Math.sin")&&js.includes("generateFields")&&js.includes("filledHeight"),"Terrain/hydrology model missing");
+assert.ok(js.includes("JSON.stringify(job.settings)!==JSON.stringify(terrainSettings())"),"Stale worker jobs are not discarded");
 assert.ok(js.includes("scale=[1,4,8].includes(Number(scale))"),"High resolution exports missing");
 
 // Execute the pure terrain generator at a small resolution and check reproducibility.

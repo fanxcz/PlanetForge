@@ -340,7 +340,7 @@
     const biome = fields.biome instanceof Uint8Array ? fields.biome : new Uint8Array(fields.biome);
     const counts = fields.counts instanceof Uint32Array ? fields.counts : new Uint32Array(fields.counts);
     const threshold = fields.threshold, landCount = fields.landCount, totalTemp = fields.totalTemp;
-    const seed = Number(state.seed) >>> 0;
+    const seed = Number(fields.seed ?? state.seed) >>> 0;
     const riverData = generateRivers(height, threshold, seed);
     const civilization = applyCustomCities(generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed));
     const meanTemp = totalTemp / size, landPercent = landCount / size * 100;
@@ -377,6 +377,9 @@
         const job = pendingTerrainJob, message = event.data || {};
         if (!job || job.worker !== worker || message.jobId !== job.id) return;
         pendingTerrainJob = null;
+        // A slider can change before its debounce fires. Never paint a result for
+        // settings that no longer match the controls; the pending debounce will rerun it.
+        if (JSON.stringify(job.settings) !== JSON.stringify(terrainSettings())) return;
         if (message.error) { runTerrainFallback(job); return; }
         try { finishPlanetFields(message.fields, job.started); }
         catch (error) { reportGenerationError(error); }
@@ -774,7 +777,7 @@
     $("humidityOut").textContent = state.humidity + "%";
     $("tectonicsOut").textContent = state.tectonics + "%";
     $("erosionOut").textContent = state.erosion + "%";
-    $("seasonOut").textContent = state.season < 25 ? "Северная зима" : state.season < 50 ? "Весенний переход" : state.season < 75 ? "Северное лето" : "Осенний переход";
+    $("seasonOut").textContent = state.season < 12.5 || state.season >= 87.5 ? "Северная зима" : state.season < 37.5 ? "Весенний переход" : state.season < 62.5 ? "Северное лето" : "Осенний переход";
     document.querySelectorAll('input[type="range"]').forEach((input) => {
       const min = Number(input.min), max = Number(input.max), val = Number(input.value);
       input.style.setProperty("--range-fill", ((val - min) / (max - min) * 100) + "%");
@@ -837,7 +840,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG-карта · 2048 × 1024</b><small>Высокое разрешение</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG-карта · 4096 × 2048</b><small>Для игровых текстур</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>Увеличенный PNG · 2048 × 1024</b><small>Масштаб текущей текстуры 512 × 256</small></i></button><button data-export="png4k"><span>4K</span><i><b>Увеличенный PNG · 4096 × 2048</b><small>Масштаб текущей текстуры 512 × 256</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
