@@ -95,12 +95,17 @@ function generateFields(config){
  const heightOverrides=config.heightOverrides;
  if(heightOverrides&&typeof heightOverrides==="object"){
   let applied=0;
+  const overrideW=Math.max(1,Math.round(Number(config.heightOverrideWidth)||W)),overrideH=Math.max(1,Math.round(Number(config.heightOverrideHeight)||H));
   for(const [key,value] of Object.entries(heightOverrides)){
    if(applied>=18000)break;
    if(!/^\d+$/.test(key))continue;
    const index=Number(key),elevation=Number(value);
-   if(index<0||index>=size||!Number.isFinite(elevation))continue;
-   height[index]=clamp(elevation,0,1.15);applied++;
+   if(index<0||index>=overrideW*overrideH||!Number.isFinite(elevation))continue;
+   const sourceX=index%overrideW,sourceY=Math.floor(index/overrideW);
+   const x0=Math.floor(sourceX/overrideW*W),x1=Math.max(x0+1,Math.floor((sourceX+1)/overrideW*W));
+   const y0=Math.floor(sourceY/overrideH*H),y1=Math.max(y0+1,Math.floor((sourceY+1)/overrideH*H));
+   for(let y=y0;y<Math.min(H,y1);y++)for(let x=x0;x<Math.min(W,x1);x++)height[y*W+x]=clamp(elevation,0,1.15);
+   applied++;
   }
  }
  let landCount=0,totalTemp=0;

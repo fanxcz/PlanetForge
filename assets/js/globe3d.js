@@ -55,8 +55,8 @@ void main(){
 }`;
 function compile(gl,type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const message=gl.getShaderInfoLog(shader)||"Unknown shader compilation error";gl.deleteShader(shader);throw new Error(message);}return shader;}
 function createProgram(gl){const program=gl.createProgram();gl.attachShader(program,compile(gl,gl.VERTEX_SHADER,VERTEX));gl.attachShader(program,compile(gl,gl.FRAGMENT_SHADER,FRAGMENT));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program)||"Unable to link WebGL program");return program;}
-function makeSphere(){
- const positions=[],uvs=[],columns=112,rows=56;
+function makeSphere(columns=112,rows=56){
+ const positions=[],uvs=[];
  function vertex(row,col){const lat=-Math.PI/2+row/rows*Math.PI,lon=col/columns*Math.PI*2,c=Math.cos(lat);positions.push(c*Math.sin(lon),Math.sin(lat),c*Math.cos(lon));uvs.push(col/columns,row/rows);}
  for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){vertex(row,col);vertex(row+1,col);vertex(row,col+1);vertex(row,col+1);vertex(row+1,col);vertex(row+1,col+1);}
  return{positions:new Float32Array(positions),uvs:new Float32Array(uvs),count:positions.length/3};
@@ -65,14 +65,25 @@ function create(canvas){
  let gl;try{gl=canvas.getContext("webgl",{alpha:true,antialias:true,premultipliedAlpha:false,powerPreference:"high-performance"})||canvas.getContext("experimental-webgl",{alpha:true,antialias:true});}catch(_){return null;}
  if(!gl)return null;
  try{
-  const program=createProgram(gl),sphere=makeSphere(),positionBuffer=gl.createBuffer(),surfacePositionBuffer=gl.createBuffer(),uvBuffer=gl.createBuffer(),texture=gl.createTexture();
-  gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.positions,gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ARRAY_BUFFER,surfacePositionBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.positions,gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ARRAY_BUFFER,uvBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.uvs,gl.STATIC_DRAW);
+  const program=createProgram(gl),positionBuffer=gl.createBuffer(),surfacePositionBuffer=gl.createBuffer(),uvBuffer=gl.createBuffer(),texture=gl.createTexture();
+  let sphere=makeSphere(112,56),meshQuality=-1;
+  function uploadSphere(nextSphere){
+   sphere=nextSphere;
+   gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.positions,gl.STATIC_DRAW);
+   gl.bindBuffer(gl.ARRAY_BUFFER,surfacePositionBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.positions,gl.STATIC_DRAW);
+   gl.bindBuffer(gl.ARRAY_BUFFER,uvBuffer);gl.bufferData(gl.ARRAY_BUFFER,sphere.uvs,gl.STATIC_DRAW);
+  }
+  uploadSphere(sphere);
   gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
   const loc={position:gl.getAttribLocation(program,"aPosition"),uv:gl.getAttribLocation(program,"aUV"),scale:gl.getUniformLocation(program,"uScale"),center:gl.getUniformLocation(program,"uCenter"),mode:gl.getUniformLocation(program,"uMode"),rotation:gl.getUniformLocation(program,"uRotation"),surface:gl.getUniformLocation(program,"uSurface"),time:gl.getUniformLocation(program,"uTime"),seed:gl.getUniformLocation(program,"uSeed")};
   let uploadedRevision=-1,lastTexture=null,lost=false,surfaceField=null;
+  function ensureMeshForQuality(projectedRadius){
+   const quality=projectedRadius<165?0:projectedRadius<285?1:projectedRadius<435?2:3;
+   if(quality===meshQuality)return;
+   const tiers=[[72,36],[112,56],[160,80],[224,112]],tier=tiers[quality];
+   uploadSphere(makeSphere(tier[0],tier[1]));meshQuality=quality;surfaceField=null;
+  }
   function deformSurfaceMesh(heightField,mapWidth,mapHeight,seaLevel){
    const positions=new Float32Array(sphere.positions.length);
    for(let vertex=0;vertex<sphere.positions.length/3;vertex++){
@@ -98,6 +109,7 @@ function create(canvas){
   return{ready:true,render(surfaceCanvas,revision,rotation,radius,width,height,centerY,seed,heightField,seaLevel){
    if(lost||!gl)return false;
    if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+   ensureMeshForQuality(radius);
    gl.viewport(0,0,width,height);gl.clearColor(0,0,0,0);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
    gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.useProgram(program);
    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
