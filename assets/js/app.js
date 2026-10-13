@@ -78,6 +78,8 @@
   let autosaveTimer = 0;
   let pointerState = null;
   let dragMoved = false;
+  let touchPoints = new Map();
+  let pinchState = null;
   let borderPaintPointer = null;
   let lastBorderPaintPoint = null;
   let lastBorderPaintAt = 0;
@@ -1295,7 +1297,7 @@
     if(!renderData)return;scale=[1,4,8].includes(Number(scale))?Number(scale):1;
     const output=document.createElement("canvas");output.width=MAP_W*scale;output.height=MAP_H*scale;
     const out=output.getContext("2d");out.drawImage(sourceTexture,0,0,output.width,output.height);
-    if(sourceTexture===textureCanvas&&renderData&&renderState.showBorders&&!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer)&&activeData){
+    if(sourceTexture===textureCanvas&&renderData&&(renderState.showBorders||renderState.layer==="political")&&!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer)&&activeData){
       const paths=buildPoliticalBoundaryPaths(activeData);
       renderPoliticalPaths(out,paths,output.width,output.height,0,0,output.width,output.height,scale,renderState.layer==="political");
     }
@@ -2151,6 +2153,17 @@
   }
   canvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    if(event.pointerType==="touch"){
+      touchPoints.set(event.pointerId,{x:event.clientX,y:event.clientY});
+      if(touchPoints.size>=2){
+        const points=[...touchPoints.values()];
+        pinchState={distance:Math.max(1,Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y)),zoom:state.zoom};
+        pointerState=null;dragMoved=true;
+        canvas.setPointerCapture(event.pointerId);canvas.dataset.dragging="true";
+        if(state.rotating){state.rotating=false;updateInterface();startAnimation();}
+        return;
+      }
+    }
     pointerState = { x: event.clientX, y: event.clientY, rotation: state.rotation, rotationX: state.rotationX };
     dragMoved = false;
     canvas.setPointerCapture(event.pointerId);
@@ -2158,13 +2171,20 @@
     if (state.rotating) { state.rotating = false; updateInterface(); startAnimation(); }
   });
   canvas.addEventListener("pointermove", (event) => {
+    if(event.pointerType==="touch"&&touchPoints.has(event.pointerId))touchPoints.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(pinchState&&touchPoints.size>=2){
+      const points=[...touchPoints.values()];
+      const distance=Math.max(1,Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y));
+      state.zoom=clamp(pinchState.zoom*distance/pinchState.distance,.65,1.55);
+      $("zoomLabel").textContent=Math.round(state.zoom*100)+"%";
+      drawGlobe();updateCoordinates(event);return;
+    }
     if (!pointerState) { updateCoordinates(event); return; }
     const dx = event.clientX - pointerState.x;
     const dy = event.clientY - pointerState.y;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
     if (dragMoved) {
-      // Invert yaw so the visible surface follows the pointer in the same direction.
-      // Pitch is deliberately unbounded: the globe can pass either pole and keep turning.
+      // The globe follows a one-finger drag; a two-finger pinch adjusts zoom.
       state.rotation = pointerState.rotation - dx / Math.max(160, canvas.clientWidth) * TAU;
       state.rotationX = pointerState.rotationX + dy / Math.max(160, canvas.clientHeight) * TAU;
       canvas.dataset.rotationY = String(state.rotation);
@@ -2173,7 +2193,10 @@
     }
     updateCoordinates(event);
   });
-  const endPointer = () => {
+  const endPointer = (event) => {
+    if(event&&touchPoints.has(event.pointerId))touchPoints.delete(event.pointerId);
+    if(pinchState){pinchState=null;touchPoints.clear();pointerState=null;}
+    else if(event&&event.pointerType==="touch")touchPoints.clear();
     pointerState = null;
     delete canvas.dataset.dragging;
     if (state.rotating) startAnimation();

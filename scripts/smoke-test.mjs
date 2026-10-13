@@ -104,5 +104,6 @@ assert.ok(generator.includes("heightOverrides")&&generator.includes("leeward")&&
 console.log("PlanetForge smoke tests passed: script wiring, WebGL, worker fields, deterministic terrain, climate, tectonics, heightmaps, map mode hidden-state regression, border painting, export, gallery, editing and sharing.");
 
 assert.ok(js.includes("function resolveCountryId(")&&js.includes("function splitSelectedCountry(")&&js.includes("function mergeSelectedCountry("),"Country merge/split editor actions are missing");
+assert.ok(js.includes("let pinchState = null;")&&js.includes("pinchState.zoom*distance/pinchState.distance"),"Mobile pinch-to-zoom must be supported on the globe");
 assert.ok(js.includes("countryNames: state.countryNames")&&js.includes("countryCapitals: state.countryCapitals"),"Custom country names and capital positions must persist");
 assert.ok(js.includes("renderGlobeTexture()")&&js.includes("globeTextureCanvas"),"WebGL globe must use the high-resolution shared political boundary texture");
