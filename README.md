@@ -20,7 +20,7 @@
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
 - **Curated world gallery:** six named example planets with fixed seeds and distinct presets; examples can be opened, edited, saved, and shared entirely offline.
-- **Game asset export:** grayscale heightmap PNG, 512×256 current map, or 2048×1024 and 4096×2048 map layers generated from the same seed and settings in a dedicated Worker. Terrain, climate, and biome detail are regenerated at the target resolution; river, political, city, and trade overlays are layered from the editor map. Geography can also be exported as CSV.
+- **Game asset export:** grayscale heightmap PNG, 2048×1024 and 4096×2048 individual map layers, or a full ZIP pack with eight 512×256 PNG layers, project JSON, biome-statistics CSV, and city/trade-route CSV. Pack rendering runs in a Worker and reuses one field generation for all layers.
 - **Six starting presets:** temperate, archipelago, desert, ice, alien, and volcanic.
 - **World controls:** sea level, continental mass, relief, global temperature, and humidity.
 - **Surface statistics:** land/water ratio, estimated mean temperature, biome distribution, river-channel cells, lake basins, delta cells, settlement count, and generated planetary properties.
@@ -97,7 +97,7 @@ PlanetForge/
 - Use **Слой карты** to change the displayed data, including grayscale heightmaps, tectonic plate boundaries, river drainage, and political territories.
 - Toggle rivers, lakes, deltas, settlements, trade routes, and state borders in the left panel. To paint state borders, switch to **Карта мира**, enable **Рисовать границы государств**, then choose a country and drag across land. **Пересоздать цивилизации** changes the civilization layout without changing terrain.
 - Choose a preset or tune controls; the surface regenerates automatically.
-- **Экспорт** opens PNG, heightmap, JSON, and CSV export options. Select Heightmap or Tectonics under **Слой карты** before exporting 2K/4K maps.
+- **Экспорт** offers PNG, heightmap, JSON, CSV, and a full ZIP resource pack. The ZIP contains eight map layers plus the project and geography data. Select Heightmap or Tectonics under **Слой карты** before exporting an individual 2K/4K map.
 - **Импорт** loads a previously exported JSON project.
 
 ## License

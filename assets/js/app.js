@@ -1102,7 +1102,7 @@
           {name:"planetforge-world.json",bytes:encoder.encode(project)},
           {name:"biome-statistics.csv",bytes:encoder.encode(biomeCSV)},
           {name:"cities-and-trade-routes.csv",bytes:encoder.encode(geographyCSV)},
-          {name:"README.txt",bytes:encoder.encode("PlanetForge resource pack\n\nEight PNG layers use one deterministic field generation.\nheightmap.png is grayscale elevation.\ntec tonics.png shows procedural plate-boundary activity.\nAll files are generated locally in the browser.\n")}
+          {name:"README.txt",bytes:encoder.encode("PlanetForge resource pack\n\nEight PNG layers use one deterministic field generation.\nheightmap.png is grayscale elevation.\ntectonics.png shows procedural plate-boundary activity.\nAll files are generated locally in the browser.\n")}
         ];
         for(const layer of result.layers)entries.push({name:layer.layer+".png",bytes:await canvasPNGBytes(layer.width,layer.height,layer.pixels)});
         const zip=zipStoredFiles(entries);
