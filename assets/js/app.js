@@ -495,9 +495,11 @@
     if([...mergeSelect.options].some(option=>option.value===previousMerge))mergeSelect.value=previousMerge;
     else mergeSelect.value="";
     let landCells=0,total=0;
-    for(let i=0;i<civ.territories.length;i++){
-      const id=civ.territories[i];
-      if(civ.heightField[i]>civ.threshold){total++;if(id!==255&&resolveCountryId(id)===selected)landCells++;}
+    if(civ.heightField&&Number.isFinite(civ.threshold)){
+      for(let i=0;i<civ.territories.length;i++){
+        const id=civ.territories[i];
+        if(civ.heightField[i]>civ.threshold){total++;if(id!==255&&resolveCountryId(id)===selected)landCells++;}
+      }
     }
     $("countryAreaStat").textContent=total?((landCells/total)*100).toFixed(1)+"% суши":"—";
     const capital=(civ.cities||[]).find(city=>city.type==="capital"&&resolveCountryId(city.countryId)===selected);
@@ -581,6 +583,7 @@
     for (let i = 0; i < counts.length; i++) if (counts[i] > size * 0.0001) uniqueBiomes++;
     activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, tectonicField, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, lakeMask:riverData.lakeMask, lakeCount:riverData.lakeCount, deltaMask:riverData.deltaMask, deltaCount:riverData.deltaCount, filledHeight:riverData.filledHeight, ...civilization, generatedMs: performance.now()-started };
     stats = { ...activeData };
+    updateBorderCountryOptions(activeData);
     drawTexture(); updateStats(); updateInterface(); renderCurrentView();
     $("resolutionLabel").textContent = "PROCEDURAL SURFACE · " + MAP_W + " × " + MAP_H;
     $("statusText").textContent = "Мир сформирован · " + state.name;
@@ -1292,6 +1295,10 @@
     if(!renderData)return;scale=[1,4,8].includes(Number(scale))?Number(scale):1;
     const output=document.createElement("canvas");output.width=MAP_W*scale;output.height=MAP_H*scale;
     const out=output.getContext("2d");out.drawImage(sourceTexture,0,0,output.width,output.height);
+    if(sourceTexture===textureCanvas&&renderData&&renderState.showBorders&&!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer)&&activeData){
+      const paths=buildPoliticalBoundaryPaths(activeData);
+      renderPoliticalPaths(out,paths,output.width,output.height,0,0,output.width,output.height,scale,renderState.layer==="political");
+    }
     const points=new Map((renderData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
     const includeOverlays=!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer);
     if(includeOverlays&&renderState.showRoutes){out.strokeStyle="rgba(195,181,139,.72)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
@@ -1558,6 +1565,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     state.layer = "biome";
     state.view = "globe";
     state.rotation = 0;
@@ -1740,6 +1748,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
   });
@@ -1750,6 +1759,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
@@ -1761,6 +1771,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     state.rotation = 0;
@@ -1772,6 +1783,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     state.preset = button.dataset.preset;
     state.customHeightOverrides = {};
     Object.assign(state, PRESETS[state.preset]);
@@ -1863,6 +1875,7 @@
     state.customCities = [];
     state.customTerritories = {};
     state.cityNames = {};
+    resetCountryEdits();
     refreshCivilization();
     showToast("Цивилизации и торговые пути пересозданы");
   });
@@ -1935,6 +1948,10 @@
     }
   });
 
+  function resetCountryEdits(){
+    state.countryNames={};state.countryMerges={};state.countryCapitals={};
+    state.selectedCountry=0;state.borderCountry=0;state.moveCapital=false;
+  }
   function selectCountry(id){
     const selected=resolveCountryId(id);
     state.selectedCountry=selected;state.borderCountry=selected;
@@ -1970,7 +1987,9 @@
   }
   function mergeSelectedCountry(){
     if(!activeData)return;
-    const source=resolveCountryId(state.selectedCountry),target=resolveCountryId($("mergeCountrySelect").value);
+    const selectedTarget=$("mergeCountrySelect").value;
+    if(selectedTarget===""){showToast("Сначала выберите государство, с которым нужно объединить");return;}
+    const source=resolveCountryId(state.selectedCountry),target=resolveCountryId(selectedTarget);
     if(!Number.isInteger(target)||target<0||target>=32||source===target){showToast("Выберите другое государство для объединения");return;}
     const exists=activeData.territories.some(value=>value!==255&&resolveCountryId(value)===target);
     if(!exists){showToast("Выбранная страна больше не имеет территории");return;}
@@ -2179,7 +2198,7 @@
     const point=pointerCoordinates(event);if(!point)return;
     const cell=mapCellFromPoint(point);
     if(state.moveCapital){moveSelectedCapitalTo(cell);return;}
-    if(!state.editBorders)return;
+    if(!state.editBorders){selectCountryAtPoint(point);return;}
     event.preventDefault();checkpointHistory();borderPaintPointer=event.pointerId;lastBorderPaintPoint=cell;lastBorderPaintAt=performance.now();
     mapCanvas.setPointerCapture(event.pointerId);paintBorderSegment(lastBorderPaintPoint,lastBorderPaintPoint);
   });
