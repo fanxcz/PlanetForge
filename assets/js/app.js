@@ -814,7 +814,7 @@
   }
 
   function drawPoliticalBorders(w, h, outW, outH) {
-    if (!activeData || (!state.showBorders && state.layer !== "political")) return;
+    if (!activeData || ["heightmap","tectonics","temperature","moisture"].includes(state.layer) || (!state.showBorders && state.layer !== "political")) return;
     if (vectorBorderCacheRevision !== textureRevision) {
       vectorBorderCache = buildPoliticalBoundaryPaths(activeData);
       vectorBorderCacheRevision = textureRevision;

@@ -99,5 +99,6 @@ assert.ok(js.includes("customHeightOverrides")&&js.includes("version: 3"),"Sculp
 assert.ok(js.includes("borderHalo")&&js.includes("const edge = state.layer === \"political\" ? [229, 219, 196] : [194, 204, 192]"),"Double-line border rendering must keep borders distinct from terrain");
 assert.ok(js.includes("[103, 128, 112], [159, 133, 96], [91, 119, 146]"),"Political map should use a restrained atlas palette");
 assert.ok(js.includes("function buildBoundaryPolylines(")&&js.includes("function drawPoliticalBorders("),"Political borders must be drawn as smoothed vector contours on the map");
+assert.ok(js.includes('["heightmap","tectonics","temperature","moisture"].includes(state.layer) || (!state.showBorders && state.layer !== "political")'),"Analytical layers must not be covered with political borders");
 assert.ok(generator.includes("heightOverrides")&&generator.includes("leeward")&&generator.includes("coastal"),"Terrain-aware climate effects are missing");
 console.log("PlanetForge smoke tests passed: script wiring, WebGL, worker fields, deterministic terrain, climate, tectonics, heightmaps, map mode hidden-state regression, border painting, export, gallery, editing and sharing.");
