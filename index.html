@@ -66,6 +66,17 @@
           <input type="range" id="humidity" min="0" max="100" value="50" step="1">
           <div class="range-caption"><span>Засушливая</span><span>Влажная</span></div>
         </section>
+
+        <section class="control-section">
+          <div class="section-title"><span class="section-number">04</span><h2>Гидрология и цивилизация</h2></div>
+          <div class="layer-toggles">
+            <label class="layer-toggle" for="showRivers"><span><strong>Реки и речные русла</strong><small>Сток с возвышенностей к низинам</small></span><input id="showRivers" type="checkbox" checked></label>
+            <label class="layer-toggle" for="showCities"><span><strong>Города и поселения</strong><small>Столицы, города и небольшие поселения</small></span><input id="showCities" type="checkbox" checked></label>
+            <label class="layer-toggle" for="showRoutes"><span><strong>Торговые пути</strong><small>Связи между поселениями одного государства</small></span><input id="showRoutes" type="checkbox" checked></label>
+            <label class="layer-toggle" for="showBorders"><span><strong>Границы государств</strong><small>Процедурные территории цивилизаций</small></span><input id="showBorders" type="checkbox" checked></label>
+          </div>
+          <button class="button button-quiet civ-regenerate-button" id="regenerateCivBtn" type="button">Пересоздать цивилизации</button>
+        </section>
         <div class="sidebar-footer"><span class="status-check">✓</span><span>Вычисления выполняются локально</span><span class="info-dot" title="PlanetForge не отправляет ваши миры на сервер.">i</span></div>
       </aside>
 
@@ -92,7 +103,7 @@
           <div class="render-overlay" id="renderOverlay"><span class="loader"></span><strong>Формируем новый мир</strong><small>Вычисляем рельеф и климатические зоны…</small></div>
         </div>
         <div class="map-legend-row">
-          <div class="map-mode-control"><span class="legend-label">СЛОЙ КАРТЫ</span><select id="mapLayer" class="select-input"><option value="biome">Биомы</option><option value="elevation">Высота рельефа</option><option value="temperature">Температура</option><option value="moisture">Влажность</option></select></div>
+          <div class="map-mode-control"><span class="legend-label">СЛОЙ КАРТЫ</span><select id="mapLayer" class="select-input"><option value="biome">Биомы</option><option value="elevation">Высота рельефа</option><option value="temperature">Температура</option><option value="moisture">Влажность</option><option value="hydrology">Реки и сток</option><option value="political">Государства</option></select></div>
           <div class="legend" id="mapLegend"><span><i class="legend-color ocean"></i>Океан</span><span><i class="legend-color forest"></i>Леса</span><span><i class="legend-color desert"></i>Пустыни</span><span><i class="legend-color mountain"></i>Горы</span><span><i class="legend-color ice"></i>Лёд</span></div>
           <button class="text-action" id="regenerateBtn"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4.8 9A7 7 0 0 1 17 6.2L20 12M4 17v-5h5m10.2 3A7 7 0 0 1 7 17.8L4 12"/></svg>Перегенерировать <span>↗</span></button>
         </div>
@@ -119,6 +130,12 @@
           <div class="property-row"><span>Наклон оси</span><strong id="tiltStat">23.5°</strong></div>
           <div class="property-row"><span>Спутники</span><strong id="moonStat">1</strong></div>
           <p class="property-note">Физические параметры — процедурные оценки для вымышленного мира, а не научное моделирование.</p>
+        </section>
+        <section class="insight-section civilization-summary">
+          <div class="section-title"><span class="section-number">◎</span><h3>Гидрология и цивилизация</h3></div>
+          <div class="property-row"><span>Поселения</span><strong id="cityCountStat">—</strong></div>
+          <div class="property-row"><span>Государства</span><strong id="countryCountStat">—</strong></div>
+          <div class="property-row"><span>Клетки речных русел</span><strong id="riverCountStat">—</strong></div>
         </section>
         <button class="button button-save-world" id="saveWorldBtn"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg>Сохранить этот мир</button>
         <div class="storage-note"><span>●</span> Сохраняется на этом устройстве</div>

@@ -61,7 +61,12 @@
     rotation: 0,
     zoom: 1,
     rotating: true,
-    isGenerating: false
+    isGenerating: false,
+    civilizationSeed: (DEFAULTS.seed ^ 0x51ed1234) >>> 0,
+    showRivers: true,
+    showCities: true,
+    showRoutes: true,
+    showBorders: true
   };
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -101,6 +106,199 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  const COUNTRY_COLORS = [
+    [55, 132, 148], [119, 103, 172], [169, 121, 67],
+    [73, 142, 105], [170, 88, 103], [76, 119, 173]
+  ];
+
+  function generateRivers(height, threshold, seed) {
+    const size = height.length;
+    const downstream = new Int32Array(size);
+    downstream.fill(-1);
+    const accumulation = new Uint32Array(size);
+    const landCells = [];
+    for (let i = 0; i < size; i++) {
+      if (height[i] > threshold) {
+        accumulation[i] = 1;
+        landCells.push(i);
+      }
+    }
+
+    // High cells are processed first, so upstream flow reaches lowlands in order.
+    // Longitude wraps at the map seam; this avoids an artificial edge in the drainage.
+    landCells.sort((a, b) => height[b] - height[a]);
+    for (const index of landCells) {
+      const x = index % MAP_W, y = Math.floor(index / MAP_W);
+      const currentHeight = height[index];
+      let lowestHeight = currentHeight - 0.00015, next = -1;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= MAP_H) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = (x + dx + MAP_W) % MAP_W;
+          const candidate = ny * MAP_W + nx;
+          if (height[candidate] < lowestHeight) {
+            lowestHeight = height[candidate];
+            next = candidate;
+          }
+        }
+      }
+      downstream[index] = next;
+    }
+
+    for (const index of landCells) {
+      const next = downstream[index];
+      if (next >= 0) accumulation[next] += accumulation[index];
+    }
+    const mask = new Uint8Array(size);
+    const cutoff = Math.max(22, Math.round(landCells.length / 1500));
+    let count = 0;
+    for (const index of landCells) {
+      if (accumulation[index] >= cutoff && downstream[index] >= 0) {
+        mask[index] = 1;
+        count++;
+      }
+    }
+    return { mask, count };
+  }
+
+  function generateCivilization(height, temperature, moisture, biome, riverMask, threshold, landCount, civilizationSeed) {
+    const rand = seededRandom(Number(civilizationSeed) >>> 0);
+    const candidates = [];
+    const prefixes = ["Ael", "Nor", "Vel", "Cyr", "Eld", "Thal", "Or", "Vey", "Mer", "Sol", "Ar", "Cal", "Ith", "Zer", "Kael", "Lun", "Rav", "Eri"];
+    const suffixes = ["oria", "haven", "aris", "mere", "dara", "eth", "holm", "gate", "wyn", "ora", "is", "ent", "ara", "ion", "vale", "crest", "port", "heim"];
+
+    for (let y = 12; y < MAP_H - 12; y += 4) {
+      const latitude = 90 - ((y + 0.5) / MAP_H) * 180;
+      if (Math.abs(latitude) > 70) continue;
+      for (let x = 0; x < MAP_W; x += 4) {
+        const index = y * MAP_W + x;
+        if (height[index] <= threshold + 0.008 || biome[index] === 5 || biome[index] === 3) continue;
+        const t = temperature[index];
+        if (t < -25 || t > 43) continue;
+
+        let nearCoast = false, nearRiver = riverMask[index] === 1;
+        for (let dy = -1; dy <= 1; dy++) {
+          const ny = y + dy;
+          if (ny < 0 || ny >= MAP_H) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = (x + dx + MAP_W) % MAP_W;
+            const neighbor = ny * MAP_W + nx;
+            if (height[neighbor] <= threshold) nearCoast = true;
+            if (riverMask[neighbor]) nearRiver = true;
+          }
+        }
+        const temperatureFit = 1 - Math.min(1, Math.abs(t - 17) / 58);
+        const moistureFit = 1 - Math.min(1, Math.abs(moisture[index] - 0.52) / 0.68);
+        const score = temperatureFit * 0.42 + moistureFit * 0.22 +
+          (nearCoast ? 0.15 : 0) + (nearRiver ? 0.19 : 0) + rand() * 0.48;
+        candidates.push({ x, y, index, latitude, longitude: ((x + 0.5) / MAP_W) * 360 - 180, score });
+      }
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const targetCount = clamp(Math.round(landCount / (MAP_W * MAP_H) * 30), 8, 28);
+    const cities = [], usedNames = new Set();
+    for (const candidate of candidates) {
+      if (cities.length >= targetCount) break;
+      const spaced = cities.every((city) => {
+        let dx = Math.abs(city.x - candidate.x);
+        dx = Math.min(dx, MAP_W - dx);
+        dx *= Math.cos(((city.lat + candidate.latitude) * 0.5) * Math.PI / 180);
+        const dy = city.y - candidate.y;
+        return dx * dx + dy * dy >= 17 * 17;
+      });
+      if (!spaced) continue;
+      let name = prefixes[Math.floor(rand() * prefixes.length)] + suffixes[Math.floor(rand() * suffixes.length)];
+      if (usedNames.has(name)) name += "-" + (cities.length + 1);
+      usedNames.add(name);
+      cities.push({
+        id: cities.length, name, x: candidate.x, y: candidate.y,
+        lat: candidate.latitude, lon: candidate.longitude,
+        score: candidate.score, type: "settlement", countryId: 0,
+        population: Math.round(1800 + rand() * 85000)
+      });
+    }
+
+    const countryCount = cities.length ? clamp(Math.round(cities.length / 4), 1, 6) : 0;
+    const capitals = cities.slice(0, countryCount);
+    const vectorFor = (lat, lon) => {
+      const latitude = lat * Math.PI / 180, longitude = lon * Math.PI / 180;
+      const cosLat = Math.cos(latitude);
+      return { x: cosLat * Math.cos(longitude), y: Math.sin(latitude), z: cosLat * Math.sin(longitude) };
+    };
+    const anchors = capitals.map((city, id) => ({ ...vectorFor(city.lat, city.lon), id, city }));
+    cities.forEach((city, i) => {
+      city.type = i < countryCount ? "capital" : (i < countryCount + Math.max(2, Math.round(cities.length * 0.22)) ? "city" : "settlement");
+      const vector = vectorFor(city.lat, city.lon);
+      let bestDot = -Infinity;
+      for (const anchor of anchors) {
+        const dot = vector.x * anchor.x + vector.y * anchor.y + vector.z * anchor.z;
+        if (dot > bestDot) { bestDot = dot; city.countryId = anchor.id; }
+      }
+    });
+
+    const territories = new Uint8Array(height.length);
+    territories.fill(255);
+    for (let y = 0; y < MAP_H; y++) {
+      const latitude = Math.PI / 2 - ((y + 0.5) / MAP_H) * Math.PI;
+      const latSin = Math.sin(latitude), latCos = Math.cos(latitude);
+      for (let x = 0; x < MAP_W; x++) {
+        const index = y * MAP_W + x;
+        if (height[index] <= threshold || anchors.length === 0) continue;
+        const longitude = ((x + 0.5) / MAP_W) * Math.PI * 2 - Math.PI;
+        const vx = latCos * Math.cos(longitude), vz = latCos * Math.sin(longitude);
+        let bestDot = -Infinity, bestId = 0;
+        for (const anchor of anchors) {
+          const dot = vx * anchor.x + latSin * anchor.y + vz * anchor.z;
+          if (dot > bestDot) { bestDot = dot; bestId = anchor.id; }
+        }
+        territories[index] = bestId;
+      }
+    }
+
+    const borders = new Uint8Array(height.length);
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const index = y * MAP_W + x;
+        if (height[index] <= threshold || territories[index] === 255) continue;
+        const right = y * MAP_W + ((x + 1) % MAP_W);
+        const left = y * MAP_W + ((x - 1 + MAP_W) % MAP_W);
+        const up = Math.max(0, y - 1) * MAP_W + x;
+        const down = Math.min(MAP_H - 1, y + 1) * MAP_W + x;
+        const owner = territories[index];
+        if ((height[right] > threshold && territories[right] !== owner) ||
+            (height[left] > threshold && territories[left] !== owner) ||
+            (height[up] > threshold && territories[up] !== owner) ||
+            (height[down] > threshold && territories[down] !== owner)) borders[index] = 1;
+      }
+    }
+
+    const routes = [], routeKeys = new Set();
+    const distance = (a, b) => {
+      const latA = a.lat * Math.PI / 180, latB = b.lat * Math.PI / 180;
+      const dLat = latB - latA;
+      let dLon = (b.lon - a.lon) * Math.PI / 180;
+      dLon = ((dLon + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      return Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLon / 2) ** 2;
+    };
+    for (const city of cities) {
+      const nearest = cities
+        .filter((other) => other.id !== city.id && other.countryId === city.countryId)
+        .map((other) => ({ other, distance: distance(city, other) }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, city.type === "capital" ? 2 : 1);
+      for (const item of nearest) {
+        const a = Math.min(city.id, item.other.id), b = Math.max(city.id, item.other.id);
+        const key = a + ":" + b;
+        if (!routeKeys.has(key)) { routeKeys.add(key); routes.push({ from: a, to: b, countryId: city.countryId }); }
+      }
+    }
+    return { cities, routes, territories, borders, countryCount };
+  }
+
   function hueColor(t, stops) {
     t = clamp(t, 0, 1);
     for (let i = 1; i < stops.length; i++) {
@@ -180,6 +378,8 @@
         if (h > threshold) landCount++;
       }
     }
+    const riverData = generateRivers(height, threshold, seed);
+    const civilization = generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed);
     const meanTemp = totalTemp / size;
     const landPercent = landCount / size * 100;
     const rand = seededRandom(seed);
@@ -189,7 +389,7 @@
     const moons = Math.floor(rand() * 5);
     let uniqueBiomes = 0;
     for (let i = 0; i < counts.length; i++) if (counts[i] > size * 0.0001) uniqueBiomes++;
-    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100 - landPercent, uniqueBiomes, radius, dayHours, tilt, moons, generatedMs: performance.now() - started };
+    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100 - landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, ...civilization, generatedMs: performance.now() - started };
     stats = { ...activeData };
     drawTexture();
     updateStats();
@@ -204,7 +404,7 @@
   }
 
   function drawTexture() {
-    const { heightField, temperature, moisture, biome, threshold } = activeData;
+    const { heightField, temperature, moisture, biome, threshold, riverMask, territories, borders } = activeData;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
@@ -222,6 +422,12 @@
           color = hueColor((temperature[i] + 35) / 72, TEMP_STOPS);
         } else if (state.layer === "moisture") {
           color = hueColor(moisture[i], MOIST_STOPS);
+        } else if (state.layer === "hydrology") {
+          color = h <= threshold
+            ? [Math.round(8 + clamp((threshold - h) * 95, 0, 20)), Math.round(27 + clamp((threshold - h) * 110, 0, 30)), Math.round(47 + clamp((threshold - h) * 150, 0, 45))]
+            : hueColor(clamp((h - threshold + 0.18) / 0.46, 0, 1), HEIGHT_STOPS);
+        } else if (state.layer === "political") {
+          color = h <= threshold ? [7, 17, 29] : (territories && territories[i] !== 255 ? COUNTRY_COLORS[territories[i] % COUNTRY_COLORS.length].slice() : [91, 99, 105]);
         } else {
           color = BIOMES[biome[i]].color.slice();
           const ocean = biome[i] <= 2;
@@ -229,6 +435,15 @@
           color[0] = Math.round(color[0] * hillShade);
           color[1] = Math.round(color[1] * hillShade);
           color[2] = Math.round(color[2] * hillShade);
+        }
+        if (borders && borders[i] && (state.showBorders || state.layer === "political")) {
+          const mix = state.layer === "political" ? 0.72 : 0.38;
+          color[0] = Math.round(lerp(color[0], 196, mix));
+          color[1] = Math.round(lerp(color[1], 225, mix));
+          color[2] = Math.round(lerp(color[2], 227, mix));
+        }
+        if (riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
+          color = state.layer === "hydrology" ? [75, 201, 229] : [76, 181, 211];
         }
         const j = i * 4;
         texturePixels[j] = color[0];
@@ -326,6 +541,7 @@
     ctx.shadowBlur = 15 * (window.devicePixelRatio || 1);
     ctx.drawImage(globeBuffer, cx - radius, cy - radius, radius * 2, radius * 2);
     ctx.restore();
+    drawCivilizationGlobe(cx, cy, radius);
     ctx.beginPath();
     ctx.arc(cx, cy, radius + 1, 0, TAU);
     ctx.strokeStyle = "rgba(136,220,236,.42)";
@@ -362,6 +578,100 @@
     }
     mapCtx.strokeStyle = "rgba(173,207,220,.22)";
     mapCtx.strokeRect((w - outW) / 2, (h - outH) / 2, outW, outH);
+    drawCivilizationMap(w, h, outW, outH);
+  }
+
+  function drawCivilizationGlobe(cx, cy, radius) {
+    if (!activeData || (!state.showCities && !state.showRoutes)) return;
+    const dpr = window.devicePixelRatio || 1;
+    const visible = new Map();
+    for (const city of activeData.cities || []) {
+      const lat = city.lat * Math.PI / 180;
+      const lon = city.lon * Math.PI / 180 - state.rotation;
+      const cosLat = Math.cos(lat);
+      const nx = cosLat * Math.sin(lon), ny = Math.sin(lat), nz = cosLat * Math.cos(lon);
+      if (nz > 0.035) visible.set(city.id, { x: cx + nx * radius, y: cy - ny * radius, z: nz, city });
+    }
+
+    ctx.save();
+    if (state.showRoutes) {
+      ctx.lineWidth = 1.25 * dpr;
+      ctx.strokeStyle = "rgba(106, 221, 214, .62)";
+      ctx.setLineDash([3.5 * dpr, 3 * dpr]);
+      ctx.beginPath();
+      for (const route of activeData.routes || []) {
+        const a = visible.get(route.from), b = visible.get(route.to);
+        if (a && b) { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (state.showCities) {
+      for (const point of visible.values()) {
+        const city = point.city, capital = city.type === "capital";
+        const size = (capital ? 3.6 : city.type === "city" ? 2.8 : 2.1) * dpr;
+        ctx.beginPath();
+        ctx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
+        ctx.shadowColor = capital ? "rgba(103,255,219,.95)" : "rgba(109,220,238,.6)";
+        ctx.shadowBlur = (capital ? 9 : 4) * dpr;
+        ctx.arc(point.x, point.y, size, 0, TAU);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(7,18,30,.9)";
+        ctx.lineWidth = 1 * dpr;
+        ctx.stroke();
+        if (capital || (city.type === "city" && state.zoom > 0.92)) {
+          ctx.font = (10 * dpr) + "px ui-monospace, SFMono-Regular, monospace";
+          ctx.textAlign = "left"; ctx.textBaseline = "middle";
+          ctx.lineWidth = 3 * dpr; ctx.strokeStyle = "rgba(4,12,22,.92)";
+          ctx.strokeText(city.name, point.x + 6 * dpr, point.y - 5 * dpr);
+          ctx.fillStyle = "#e2f5ff";
+          ctx.fillText(city.name, point.x + 6 * dpr, point.y - 5 * dpr);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawCivilizationMap(w, h, outW, outH) {
+    if (!activeData || (!state.showCities && !state.showRoutes)) return;
+    const dpr = window.devicePixelRatio || 1;
+    const left = (w - outW) / 2, top = (h - outH) / 2;
+    const points = new Map((activeData.cities || []).map((city) => [city.id, {
+      x: left + (city.x + 0.5) / MAP_W * outW,
+      y: top + (city.y + 0.5) / MAP_H * outH,
+      city
+    }]));
+    mapCtx.save();
+    if (state.showRoutes) {
+      mapCtx.strokeStyle = "rgba(103, 224, 211, .78)";
+      mapCtx.lineWidth = 1.15 * dpr;
+      mapCtx.setLineDash([4 * dpr, 3 * dpr]);
+      mapCtx.beginPath();
+      for (const route of activeData.routes || []) {
+        const a = points.get(route.from), b = points.get(route.to);
+        if (!a || !b || Math.abs(a.x - b.x) > outW / 2) continue;
+        mapCtx.moveTo(a.x, a.y); mapCtx.lineTo(b.x, b.y);
+      }
+      mapCtx.stroke(); mapCtx.setLineDash([]);
+    }
+    if (state.showCities) {
+      for (const point of points.values()) {
+        const city = point.city, capital = city.type === "capital";
+        const size = (capital ? 3.2 : city.type === "city" ? 2.4 : 1.7) * dpr;
+        mapCtx.beginPath();
+        mapCtx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
+        mapCtx.arc(point.x, point.y, size, 0, TAU); mapCtx.fill();
+        if (capital || city.type === "city") {
+          mapCtx.font = (9 * dpr) + "px ui-monospace, SFMono-Regular, monospace";
+          mapCtx.textAlign = "left"; mapCtx.textBaseline = "middle";
+          mapCtx.lineWidth = 3 * dpr; mapCtx.strokeStyle = "rgba(4,12,22,.92)";
+          mapCtx.strokeText(city.name, point.x + 5 * dpr, point.y - 4 * dpr);
+          mapCtx.fillStyle = "#e2f5ff"; mapCtx.fillText(city.name, point.x + 5 * dpr, point.y - 4 * dpr);
+        }
+      }
+    }
+    mapCtx.restore();
   }
 
   function renderCurrentView() {
@@ -408,6 +718,9 @@
     $("dayStat").textContent = String(hrs).padStart(2, "0") + " h " + String(mins).padStart(2, "0") + " m";
     $("tiltStat").textContent = stats.tilt.toFixed(1) + "°";
     $("moonStat").textContent = String(stats.moons);
+    $("cityCountStat").textContent = String((stats.cities || []).length);
+    $("countryCountStat").textContent = String(stats.countryCount || 0);
+    $("riverCountStat").textContent = Number(stats.riverCount || 0).toLocaleString("ru-RU");
     const bars = $("biomeBars").querySelectorAll("i");
     bars.forEach((bar, i) => { bar.style.opacity = i < stats.uniqueBiomes ? "1" : ".18"; });
     const total = MAP_W * MAP_H;
@@ -444,6 +757,11 @@
     $("rotationSwitch").classList.toggle("on", state.rotating);
     $("rotateBtn").setAttribute("aria-pressed", String(state.rotating));
     $("mapLayer").value = state.layer;
+    $("showRivers").checked = state.showRivers;
+    $("showCities").checked = state.showCities;
+    $("showRoutes").checked = state.showRoutes;
+    $("showBorders").checked = state.showBorders;
+    $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%";
     $("viewModeLabel").textContent = state.view === "globe" ? "PLANET VIEW / 3D RENDER" : "CARTOGRAPHY / EQUIRECTANGULAR";
     updateLegend();
   }
@@ -453,7 +771,9 @@
       biome: [['Океан','#1b5d82'],['Леса','#44805f'],['Пустыни','#c59b57'],['Горы','#b9c2bc'],['Лёд','#cbe8ed']],
       elevation: [['Глубины','#12375a'],['Низменность','#4e8d79'],['Возвышенность','#a28b67'],['Горы','#c5ccc7'],['Вершины','#f6faf7']],
       temperature: [['Холод','#1f407d'],['Прохладно','#7dbdb7'],['Умеренно','#b3cb8f'],['Жарко','#d97d4d'],['Экстремум','#97373e']],
-      moisture: [['Засуха','#976b43'],['Сухо','#c29b5b'],['Умеренно','#afb869'],['Влажно','#369281'],['Очень влажно','#2e70a3']]
+      moisture: [['Засуха','#976b43'],['Сухо','#c29b5b'],['Умеренно','#afb869'],['Влажно','#369281'],['Очень влажно','#2e70a3']],
+      hydrology: [['Океан','#12375a'],['Низменность','#4e8d79'],['Реки','#4bc9e5'],['Возвышенность','#a28b67'],['Горы','#c5ccc7']],
+      political: [['Территория A','#378494'],['Территория B','#7767ac'],['Территория C','#a97943'],['Границы','#c4e1e3'],['Поселения','#a6ffe5']]
     };
     $("mapLegend").innerHTML = labels[state.layer].map(([label,color]) => '<span><i class="legend-color" style="background:' + color + '"></i>' + label + '</span>').join("");
   }
@@ -523,7 +843,39 @@
   }
   function exportPNG() {
     if (!activeData) return;
-    textureCanvas.toBlob((blob) => {
+    const output = document.createElement("canvas");
+    output.width = MAP_W; output.height = MAP_H;
+    const outputCtx = output.getContext("2d");
+    outputCtx.drawImage(textureCanvas, 0, 0);
+    const cityPoints = new Map((activeData.cities || []).map((city) => [city.id, { x: city.x + 0.5, y: city.y + 0.5, city }]));
+    if (state.showRoutes) {
+      outputCtx.strokeStyle = "rgba(103,224,211,.9)";
+      outputCtx.lineWidth = 1.1;
+      outputCtx.setLineDash([2.6, 2.2]);
+      outputCtx.beginPath();
+      for (const route of activeData.routes || []) {
+        const a = cityPoints.get(route.from), b = cityPoints.get(route.to);
+        if (!a || !b || Math.abs(a.x - b.x) > MAP_W / 2) continue;
+        outputCtx.moveTo(a.x, a.y); outputCtx.lineTo(b.x, b.y);
+      }
+      outputCtx.stroke(); outputCtx.setLineDash([]);
+    }
+    if (state.showCities) {
+      for (const point of cityPoints.values()) {
+        const city = point.city, capital = city.type === "capital";
+        outputCtx.beginPath();
+        outputCtx.fillStyle = capital ? "#a6ffe5" : city.type === "city" ? "#90def0" : "#d0dae5";
+        outputCtx.arc(point.x, point.y, capital ? 2.2 : city.type === "city" ? 1.7 : 1.1, 0, TAU);
+        outputCtx.fill();
+        if (capital || city.type === "city") {
+          outputCtx.font = "6px ui-monospace, monospace";
+          outputCtx.lineWidth = 1.7; outputCtx.strokeStyle = "rgba(4,12,22,.92)";
+          outputCtx.strokeText(city.name, point.x + 3, point.y - 2.5);
+          outputCtx.fillStyle = "#e2f5ff"; outputCtx.fillText(city.name, point.x + 3, point.y - 2.5);
+        }
+      }
+    }
+    output.toBlob((blob) => {
       if (blob) { downloadBlob(blob, cleanFileName(state.name) + "-" + state.layer + ".png"); showToast("PNG-карта экспортирована"); }
       else showToast("Не удалось экспортировать PNG");
     }, "image/png");
@@ -536,7 +888,8 @@
       seed: Number(state.seed),
       preset: state.preset,
       settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity },
-      view: { layer: state.layer, zoom: state.zoom },
+      civilizationSeed: Number(state.civilizationSeed),
+      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders },
       exportedAt: new Date().toISOString()
     };
   }
@@ -560,7 +913,7 @@
     } catch (_) { return []; }
   }
   function saveWorld() {
-    const world = { id: String(Date.now()) + "-" + String(Math.floor(Math.random() * 100000)), name: state.name || "Безымянный мир", seed: Number(state.seed), preset: state.preset, settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity }, savedAt: new Date().toISOString(), stats: stats ? { landPercent: Number(stats.landPercent.toFixed(2)), meanTemp: Number(stats.meanTemp.toFixed(1)), uniqueBiomes: stats.uniqueBiomes } : null };
+    const world = { id: String(Date.now()) + "-" + String(Math.floor(Math.random() * 100000)), name: state.name || "Безымянный мир", seed: Number(state.seed), civilizationSeed: Number(state.civilizationSeed), preset: state.preset, settings: { seaLevel: state.seaLevel, landmass: state.landmass, relief: state.relief, temperature: state.temperature, humidity: state.humidity }, view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders }, savedAt: new Date().toISOString(), stats: stats ? { landPercent: Number(stats.landPercent.toFixed(2)), meanTemp: Number(stats.meanTemp.toFixed(1)), uniqueBiomes: stats.uniqueBiomes } : null };
     const worlds = readSavedWorlds().filter((item) => item.seed !== world.seed || item.name !== world.name);
     worlds.unshift(world);
     try {
@@ -603,14 +956,19 @@
     const settings = input.settings || input;
     state.name = String(input.name || "Untitled World").slice(0, 48);
     state.seed = normalizeSeed(input.seed);
+    state.civilizationSeed = input.civilizationSeed === undefined ? ((state.seed ^ 0x51ed1234) >>> 0) : normalizeSeed(input.civilizationSeed);
     state.preset = PRESETS[input.preset] ? input.preset : "custom";
     state.seaLevel = clampInt(settings.seaLevel, 34, 67, 50);
     state.landmass = clampInt(settings.landmass, -12, 12, 0);
     state.relief = clampInt(settings.relief, 1, 10, 5);
     state.temperature = clampInt(settings.temperature, -40, 40, 0);
     state.humidity = clampInt(settings.humidity, 0, 100, 50);
-    state.layer = input.view && ["biome", "elevation", "temperature", "moisture"].includes(input.view.layer) ? input.view.layer : "biome";
-    state.zoom = input.view && Number.isFinite(input.view.zoom) ? clamp(input.view.zoom, .7, 1.5) : 1;
+    state.layer = input.view && ["biome", "elevation", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
+    state.zoom = input.view && Number.isFinite(input.view.zoom) ? clamp(input.view.zoom, .65, 1.55) : 1;
+    state.showRivers = input.view && typeof input.view.showRivers === "boolean" ? input.view.showRivers : true;
+    state.showCities = input.view && typeof input.view.showCities === "boolean" ? input.view.showCities : true;
+    state.showRoutes = input.view && typeof input.view.showRoutes === "boolean" ? input.view.showRoutes : true;
+    state.showBorders = input.view && typeof input.view.showBorders === "boolean" ? input.view.showBorders : true;
     state.rotation = 0;
     updateInterface();
     scheduleGenerate();
@@ -649,16 +1007,19 @@
   });
   $("seedInput").addEventListener("change", () => {
     state.seed = normalizeSeed($("seedInput").value);
+    state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
   });
   $("randomSeedBtn").addEventListener("click", () => {
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     updateInterface(); scheduleGenerate();
   });
   $("regenerateBtn").addEventListener("click", () => {
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.preset = "custom";
     state.rotation = 0;
     updateInterface(); scheduleGenerate();
@@ -667,6 +1028,7 @@
     state.preset = button.dataset.preset;
     Object.assign(state, PRESETS[state.preset]);
     state.seed = Math.floor(Math.random() * 900000000) + 100000000;
+    state.civilizationSeed = (state.seed ^ 0x51ed1234) >>> 0;
     state.rotation = 0;
     updateInterface(); scheduleGenerate();
   }));
@@ -683,6 +1045,24 @@
     state.layer = $("mapLayer").value;
     updateInterface();
     if (activeData) { drawTexture(); renderCurrentView(); }
+  });
+  [["showRivers", "showRivers"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
+    $(id).addEventListener("change", () => {
+      state[key] = $(id).checked;
+      if (activeData) { drawTexture(); renderCurrentView(); }
+      updateInterface();
+    });
+  });
+  $("regenerateCivBtn").addEventListener("click", () => {
+    state.civilizationSeed = Math.floor(Math.random() * 2147483646) + 1;
+    if (!activeData) return;
+    const civilization = generateCivilization(activeData.heightField, activeData.temperature, activeData.moisture, activeData.biome, activeData.riverMask, activeData.threshold, activeData.landCount, state.civilizationSeed);
+    Object.assign(activeData, civilization);
+    stats = { ...activeData };
+    drawTexture();
+    updateStats();
+    renderCurrentView();
+    showToast("Цивилизации и торговые пути пересозданы");
   });
   document.querySelectorAll(".view-tab").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $("rotateBtn").addEventListener("click", () => {

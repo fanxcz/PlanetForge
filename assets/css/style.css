@@ -223,3 +223,16 @@ input[type=range]::-moz-range-thumb{width:10px;height:10px;border:2px solid #0c1
 .export-menu>button b{font-size:10px;color:#dbe6f2;font-weight:700}
 .export-menu>button small{font-size:8px;color:#70869b}
 @keyframes menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+
+/* Procedural hydrology and civilization layer controls */
+.layer-toggles{display:grid;gap:8px}
+.layer-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #1e2b3e;border-radius:6px;background:#0d1521;cursor:pointer;transition:border-color .16s,background .16s}
+.layer-toggle:hover{border-color:#345b5a;background:#101d2b}
+.layer-toggle>span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.layer-toggle strong{font-size:10px;font-weight:600;color:#c9d7e6}
+.layer-toggle small{font-size:8px;line-height:1.5;color:#70849a}
+.layer-toggle input{width:15px;height:15px;flex:none;accent-color:var(--accent);cursor:pointer}
+.civ-regenerate-button{width:100%;height:34px;margin-top:10px;justify-content:center;font-size:9px}
+.civilization-summary .property-row{margin:9px 0}
+@media(max-width:680px){.layer-toggle{padding:11px}.layer-toggle strong{font-size:11px}.layer-toggle small{font-size:9px}.civ-regenerate-button{height:38px}}
