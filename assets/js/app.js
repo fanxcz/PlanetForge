@@ -578,7 +578,7 @@
     const cy = h * 0.51;
     const baseRadius = Math.min(w, h) * 0.355;
     const radius = Math.max(35, Math.min(Math.min(w, h) * 0.46, baseRadius * state.zoom));
-    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, radius, w, h, cy, Number(state.seed))) {
+    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, radius, w, h, cy, Number(state.seed), activeData.heightField, activeData.threshold)) {
       drawCivilizationGlobe(cx, cy, radius);
       return;
     }
