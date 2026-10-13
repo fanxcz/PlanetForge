@@ -415,7 +415,7 @@
     $("biomeBreakdown").innerHTML = order.map(([id, count]) => {
       const value = count / total * 100;
       const color = BIOMES[id].color;
-      return '<div class="breakdown-row"><div class="breakdown-name"><i class="breakdown-dot" style="background:rgb(' + color.join(",") + ')"></i><span>' + BIOMES[id].name + '</span></div><span class="breakdown-value">' + value.toFixed(1) + '%</span><div class="breakdown-track"><i style="width:' + Math.max(1, value / Math.max(...order.map((x) => x[1]) / total * 100, 1) * 100) + '%;background:rgb(' + color.join(",") + ')"></i></div></div>';
+      return '<div class="breakdown-row"><div class="breakdown-name"><i class="breakdown-dot" style="background:rgb(' + color.join(",") + ')"></i><span>' + BIOMES[id].name + '</span></div><span class="breakdown-value">' + value.toFixed(1) + '%</span><div class="breakdown-track"><i style="width:' + Math.max(1, value / Math.max(...order.map((x) => x[1] / total * 100), 1) * 100) + '%;background:rgb(' + color.join(",") + ')"></i></div></div>';
     }).join("") || '<div class="breakdown-empty">Нет выраженных биомов</div>';
     const className = stats.meanTemp < -8 ? "CRYOGENIC · CLASS F" : stats.meanTemp > 25 ? "ARID / HOT · CLASS H" : (stats.landPercent < 12 ? "OCEANIC · CLASS O" : "TERRESTRIAL · CLASS M");
     $("planetClass").textContent = className;
