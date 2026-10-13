@@ -127,6 +127,22 @@
             <select id="borderCountrySelect" class="select-input"><option value="0">Загрузка государств…</option></select>
             <p id="borderEditorHint">Включите кисть и выберите государство, чтобы рисовать границы на карте мира.</p>
           </div>
+          <div class="country-editor" aria-label="Редактор государств">
+            <div class="country-editor-heading">Выбранное государство</div>
+            <label class="field-label" for="countryNameInput">Название</label>
+            <input class="text-input" id="countryNameInput" maxlength="48" value="" autocomplete="off" placeholder="Название страны">
+            <button class="button button-quiet country-editor-button" id="renameCountryBtn" type="button">Сохранить название</button>
+            <div class="country-summary"><span>Доля суши</span><strong id="countryAreaStat">—</strong></div>
+            <div class="country-summary"><span>Столица</span><strong id="countryCapitalStat">—</strong></div>
+            <label class="field-label field-label-spaced" for="mergeCountrySelect">Объединить с государством</label>
+            <select id="mergeCountrySelect" class="select-input"><option value="">Выберите государство</option></select>
+            <div class="country-action-row">
+              <button class="button button-quiet" id="mergeCountryBtn" type="button">Объединить</button>
+              <button class="button button-quiet" id="splitCountryBtn" type="button">Разделить</button>
+            </div>
+            <label class="move-capital-control" for="moveCapitalToggle"><input id="moveCapitalToggle" type="checkbox"><span>Перенести столицу кликом по карте</span></label>
+            <p id="countryEditorHint">Выберите страну на глобусе или карте.</p>
+          </div>
           <button class="button button-quiet civ-regenerate-button" id="regenerateCivBtn" type="button">Пересоздать цивилизации</button>
         </section>
         <div class="sidebar-footer"><span class="status-check">✓</span><span>Вычисления выполняются локально</span><span class="info-dot" title="PlanetForge не отправляет ваши миры на сервер.">i</span></div>

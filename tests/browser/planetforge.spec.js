@@ -167,3 +167,44 @@ test("political map uses clear country frontiers without page errors", async ({ 
   expect(canvasSize.width / canvasSize.height).toBeGreaterThan(1);
   expect(pageErrors).toEqual([]);
 });
+
+
+test("country editor persists names and supports split and merge", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+  await openReadyWorld(page);
+  await page.locator('.view-tab[data-view="map"]').click();
+  await page.locator("#mapLayer").selectOption("political");
+  await expect(page.locator("#countryNameInput")).toBeVisible();
+
+  await page.locator("#countryNameInput").fill("Northwind Republic");
+  await page.locator("#renameCountryBtn").click();
+  await expect.poll(async () => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem("planetforge.autosave.v1") || "null");
+    return Object.values(project?.countryNames || {}).includes("Northwind Republic");
+  }), { timeout: 60_000 }).toBe(true);
+
+  await page.locator("#splitCountryBtn").click();
+  await expect.poll(async () => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem("planetforge.autosave.v1") || "null");
+    return Object.keys(project?.countryCapitals || {}).some(id => Number(id) >= 6) &&
+      Object.values(project?.customTerritories || {}).some(id => Number(id) >= 6);
+  }), { timeout: 60_000 }).toBe(true);
+
+  const splitId = await page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem("planetforge.autosave.v1") || "null");
+    return Number(project?.view?.selectedCountry);
+  });
+  expect(splitId).toBeGreaterThanOrEqual(6);
+  const target = await page.locator("#mergeCountrySelect option").evaluateAll(options =>
+    options.find(option => option.value && Number(option.value) < 6)?.value || ""
+  );
+  expect(target).not.toBe("");
+  await page.locator("#mergeCountrySelect").selectOption(target);
+  await page.locator("#mergeCountryBtn").click();
+  await expect.poll(async () => page.evaluate(splitId => {
+    const project = JSON.parse(localStorage.getItem("planetforge.autosave.v1") || "null");
+    return Number(project?.countryMerges?.[String(splitId)]);
+  }, splitId), { timeout: 60_000 }).toBe(Number(target));
+  expect(pageErrors).toEqual([]);
+});

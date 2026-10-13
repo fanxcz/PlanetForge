@@ -56,6 +56,12 @@
   textureCanvas.width = MAP_W;
   textureCanvas.height = MAP_H;
   const textureCtx = textureCanvas.getContext("2d", { alpha: false });
+  // A 2x atlas texture gives the WebGL globe sub-cell antialiasing for the same
+  // political paths that are drawn over the equirectangular map.
+  const globeTextureCanvas = document.createElement("canvas");
+  globeTextureCanvas.width = MAP_W * 2;
+  globeTextureCanvas.height = MAP_H * 2;
+  const globeTextureCtx = globeTextureCanvas.getContext("2d", { alpha: false });
   const textureImage = textureCtx.createImageData(MAP_W, MAP_H);
   let texturePixels = textureImage.data;
   let globeBuffer = null;
@@ -94,7 +100,8 @@
     ...DEFAULTS, view:"globe", layer:"biome", rotation:0, rotationX:0, zoom:1,
     rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
     showRivers:true,showLakes:true,showDeltas:true,showCities:true,showRoutes:true,showBorders:true,
-    editBorders:false,borderCountry:0,customTerritories:{},
+    editBorders:false,borderCountry:0,selectedCountry:0,moveCapital:false,
+    customTerritories:{},countryNames:{},countryMerges:{},countryCapitals:{},
     editTerrain:false,terrainBrush:"raise",terrainBrushSize:8,terrainBrushStrength:45,customHeightOverrides:{},
     tectonics:56,erosion:28,season:50,customCities:[],cityNames:{}
   };
@@ -258,6 +265,14 @@
     }
 
     const countryCount = cities.length ? clamp(Math.round(cities.length / 4), 1, 6) : 0;
+    for(let id=0;id<countryCount;id++){
+      const position=state.countryCapitals&&state.countryCapitals[String(id)];
+      if(!position)continue;
+      const x=clampInt(position.x,0,MAP_W-1,0),y=clampInt(position.y,0,MAP_H-1,0);
+      if(height[y*MAP_W+x]<=threshold)continue;
+      const city=cities[id];
+      city.x=x;city.y=y;city.lat=90-((y+.5)/MAP_H)*180;city.lon=((x+.5)/MAP_W)*360-180;
+    }
     const capitals = cities.slice(0, countryCount);
     const vectorFor = (lat, lon) => {
       const latitude = lat * Math.PI / 180, longitude = lon * Math.PI / 180;
@@ -376,12 +391,82 @@
     }
     return civ;
   }
+  function resolveCountryId(value){
+    let id=Number(value);
+    if(!Number.isInteger(id)||id<0||id>=32)return 0;
+    const merges=state.countryMerges||{},seen=new Set();
+    while(Object.prototype.hasOwnProperty.call(merges,String(id))&&!seen.has(id)){
+      seen.add(id);
+      const target=Number(merges[String(id)]);
+      if(!Number.isInteger(target)||target<0||target>=32||target===id)break;
+      id=target;
+    }
+    return id;
+  }
+  function countryDisplayName(civ,id){
+    id=resolveCountryId(id);
+    const custom=state.countryNames&&state.countryNames[String(id)];
+    if(custom&&String(custom).trim())return String(custom).trim().slice(0,48);
+    const capital=(civ&&civ.cities||[]).find(city=>city.type==="capital"&&resolveCountryId(city.countryId)===id);
+    return capital?String(capital.name):"Государство "+(id+1);
+  }
+  function rebuildTradeRoutes(cities){
+    const routes=[],keys=new Set();
+    const distance=(a,b)=>{
+      const latA=a.lat*Math.PI/180,latB=b.lat*Math.PI/180;
+      const dLat=latB-latA;let dLon=(b.lon-a.lon)*Math.PI/180;
+      dLon=((dLon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+      return Math.sin(dLat/2)**2+Math.cos(latA)*Math.cos(latB)*Math.sin(dLon/2)**2;
+    };
+    for(const city of cities){
+      const nearest=cities.filter(other=>other.id!==city.id&&resolveCountryId(other.countryId)===resolveCountryId(city.countryId))
+        .map(other=>({other,distance:distance(city,other)}))
+        .sort((a,b)=>a.distance-b.distance).slice(0,city.type==="capital"?2:1);
+      for(const item of nearest){
+        const key=[String(city.id),String(item.other.id)].sort().join(":");
+        if(keys.has(key))continue;keys.add(key);
+        routes.push({from:city.id,to:item.other.id,countryId:resolveCountryId(city.countryId)});
+      }
+    }
+    return routes;
+  }
+
   function applyCustomTerritories(civ,heightField,threshold){
     const territories=civ.territories;
+    const baseCountryCount=civ.countryCount;
+    for(let i=0;i<territories.length;i++)if(territories[i]!==255)territories[i]=resolveCountryId(territories[i]);
     for(const [key,value] of Object.entries(state.customTerritories||{})){
       const index=Number(key),country=Number(value);
-      if(Number.isInteger(index)&&index>=0&&index<territories.length&&country>=0&&country<civ.countryCount&&heightField[index]>threshold)territories[index]=country;
+      if(Number.isInteger(index)&&index>=0&&index<territories.length&&Number.isInteger(country)&&country>=0&&country<32&&heightField[index]>threshold)territories[index]=resolveCountryId(country);
     }
+
+    for(const city of civ.cities||[]){
+      const rawCountry=Number(city.countryId),canonical=resolveCountryId(rawCountry);
+      if(city.type==="capital"&&canonical!==rawCountry)city.type="city";
+      city.countryId=canonical;
+      const index=clampInt(city.y,0,MAP_H-1,0)*MAP_W+clampInt(city.x,0,MAP_W-1,0);
+      if(heightField[index]>threshold&&territories[index]!==255){
+        const owner=resolveCountryId(territories[index]);
+        if(owner!==city.countryId&&city.type==="capital")city.type="city";
+        city.countryId=owner;
+      }
+    }
+
+    for(const [key,value] of Object.entries(state.countryCapitals||{})){
+      const country=Number(key);
+      if(!Number.isInteger(country)||country<baseCountryCount||country>=32||resolveCountryId(country)!==country)continue;
+      const x=clampInt(value&&value.x,0,MAP_W-1,0),y=clampInt(value&&value.y,0,MAP_H-1,0),index=y*MAP_W+x;
+      if(heightField[index]<=threshold)continue;
+      if(territories[index]!==country)territories[index]=country;
+      if(!(civ.cities||[]).some(city=>city.type==="capital"&&resolveCountryId(city.countryId)===country)){
+        civ.cities.push({id:"capital-"+country,name:countryDisplayName(civ,country),x,y,lat:90-((y+.5)/MAP_H)*180,lon:((x+.5)/MAP_W)*360-180,type:"capital",countryId:country,population:25000});
+      }
+    }
+
+    const occupied=new Set();
+    for(let i=0;i<territories.length;i++)if(heightField[i]>threshold&&territories[i]!==255){territories[i]=resolveCountryId(territories[i]);occupied.add(territories[i]);}
+    civ.countryCount=occupied.size;
+    civ.routes=rebuildTradeRoutes(civ.cities||[]);
     civ.borders=new Uint8Array(territories.length);
     for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){
       const i=y*MAP_W+x;if(heightField[i]<=threshold||territories[i]===255)continue;
@@ -391,13 +476,49 @@
     }
     return civ;
   }
+  function updateCountryEditor(civ){
+    if(!civ)return;
+    const selected=resolveCountryId(state.selectedCountry);
+    const nameInput=$("countryNameInput");
+    if(document.activeElement!==nameInput)nameInput.value=countryDisplayName(civ,selected);
+    const mergeSelect=$("mergeCountrySelect");
+    const previousMerge=mergeSelect.value;
+    mergeSelect.replaceChildren();
+    const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Выберите государство";mergeSelect.appendChild(placeholder);
+    const ids=new Set();
+    for(let i=0;i<civ.territories.length;i++){const id=civ.territories[i];if(id!==255)ids.add(resolveCountryId(id));}
+    for(const city of civ.cities||[])if(city.type==="capital")ids.add(resolveCountryId(city.countryId));
+    for(const id of [...ids].sort((a,b)=>a-b)){
+      if(id===selected)continue;
+      const option=document.createElement("option");option.value=String(id);option.textContent=countryDisplayName(civ,id);mergeSelect.appendChild(option);
+    }
+    if([...mergeSelect.options].some(option=>option.value===previousMerge))mergeSelect.value=previousMerge;
+    else mergeSelect.value="";
+    let landCells=0,total=0;
+    for(let i=0;i<civ.territories.length;i++){
+      const id=civ.territories[i];
+      if(civ.heightField[i]>civ.threshold){total++;if(id!==255&&resolveCountryId(id)===selected)landCells++;}
+    }
+    $("countryAreaStat").textContent=total?((landCells/total)*100).toFixed(1)+"% суши":"—";
+    const capital=(civ.cities||[]).find(city=>city.type==="capital"&&resolveCountryId(city.countryId)===selected);
+    $("countryCapitalStat").textContent=capital?capital.name:"—";
+    $("countryEditorHint").textContent=state.moveCapital?"Режим переноса столицы: нажмите на сушу карты, чтобы переместить столицу выбранной страны.":"Выберите страну кликом по карте или глобусу. Названия и изменение границ сохраняются в проекте.";
+    $("moveCapitalToggle").checked=state.moveCapital;
+  }
   function updateBorderCountryOptions(civ){
-    const select=$("borderCountrySelect");
-    const capitals=(civ.cities||[]).filter(city=>city.type==="capital");
-    if(!capitals.length){select.innerHTML='<option value="0">Нет государств</option>';state.borderCountry=0;return;}
-    if(state.borderCountry>=civ.countryCount)state.borderCountry=0;
-    select.innerHTML=capitals.map(city=>'<option value="'+Number(city.countryId)+'">'+escapeHTML(city.name)+'</option>').join("");
+    const select=$("borderCountrySelect"),ids=new Set();
+    for(let i=0;i<civ.territories.length;i++){const id=civ.territories[i];if(id!==255)ids.add(resolveCountryId(id));}
+    for(const city of civ.cities||[])if(city.type==="capital")ids.add(resolveCountryId(city.countryId));
+    const sorted=[...ids].sort((a,b)=>a-b);
+    if(!sorted.length){sorted.push(0);}
+    state.selectedCountry=resolveCountryId(state.selectedCountry);
+    if(!ids.has(state.selectedCountry))state.selectedCountry=sorted[0];
+    state.borderCountry=resolveCountryId(state.borderCountry);
+    if(!ids.has(state.borderCountry))state.borderCountry=state.selectedCountry;
+    select.replaceChildren();
+    for(const id of sorted){const option=document.createElement("option");option.value=String(id);option.textContent=countryDisplayName(civ,id);select.appendChild(option);}
     select.value=String(state.borderCountry);
+    updateCountryEditor(civ);
   }
   function refreshCivilization(){if(!activeData)return;const civ=applyCustomTerritories(applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed)),activeData.heightField,activeData.threshold);Object.assign(activeData,civ);updateBorderCountryOptions(civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();scheduleAutosave();}
   function editOrAddCity(event){
@@ -565,6 +686,12 @@
           color[1] = Math.round(color[1] * hillShade);
           color[2] = Math.round(color[2] * hillShade);
         }
+        if(!pureLayer&&territories&&territories[i]!==255&&resolveCountryId(territories[i])===resolveCountryId(state.selectedCountry)){
+          const amount=state.layer==="political"?.23:.09,selection=[211,194,155];
+          color[0]=Math.round(lerp(color[0],selection[0],amount));
+          color[1]=Math.round(lerp(color[1],selection[1],amount));
+          color[2]=Math.round(lerp(color[2],selection[2],amount));
+        }
         if (!pureLayer && lakeMask && lakeMask[i] && (state.showLakes || state.layer === "hydrology")) color = [42, 127, 170];
         if (!pureLayer && deltaMask && deltaMask[i] && (state.showDeltas || state.layer === "hydrology")) color = [88, 182, 160];
         if (!pureLayer && riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
@@ -573,7 +700,9 @@
 
         // Draw borders as a fine double line: a dark casing protects legibility
         // over every biome, with a quiet warm highlight on the actual frontier.
-        if (!pureLayer && borders && (state.showBorders || state.layer === "political")) {
+        // WebGL receives smooth vector lines from the 2x atlas; retain the raster
+        // fallback only for browsers where WebGL is unavailable.
+        if ((!globe3D || !globe3D.ready) && !pureLayer && borders && (state.showBorders || state.layer === "political")) {
           const left = y * MAP_W + (x - 1 + MAP_W) % MAP_W;
           const right = y * MAP_W + (x + 1) % MAP_W;
           const up = Math.max(0, y - 1) * MAP_W + x;
@@ -583,8 +712,10 @@
           const upRight = Math.max(0, y - 1) * MAP_W + (x + 1) % MAP_W;
           const downLeft = Math.min(MAP_H - 1, y + 1) * MAP_W + (x - 1 + MAP_W) % MAP_W;
           const downRight = Math.min(MAP_H - 1, y + 1) * MAP_W + (x + 1) % MAP_W;
-          const neighbors = [left, right, up, down, upLeft, upRight, downLeft, downRight];
-          const neighborCount = neighbors.reduce((count, index) => count + (borders[index] ? 1 : 0), 0);
+          const neighborCount = Number(!!borders[left]) + Number(!!borders[right]) +
+            Number(!!borders[up]) + Number(!!borders[down]) +
+            Number(!!borders[upLeft]) + Number(!!borders[upRight]) +
+            Number(!!borders[downLeft]) + Number(!!borders[downRight]);
           const borderHalo = !isCore && neighborCount > 0;
           if (isCore) {
             const mix = state.layer === "political" ? 0.52 : 0.32;
@@ -610,6 +741,7 @@
     textureCtx.putImageData(textureImage, 0, 0);
     textureRevision++;
     mapData = texturePixels;
+    renderGlobeTexture();
   }
 
   function resizeCanvas(el, context) {
@@ -637,7 +769,7 @@
     const cy = h * 0.51;
     const baseRadius = Math.min(w, h) * 0.355;
     const radius = Math.max(35, Math.min(Math.min(w, h) * 0.46, baseRadius * state.zoom));
-    if (globe3D && globe3D.ready && globe3D.render(textureCanvas, textureRevision, state.rotation, state.rotationX, radius, w, h, cy, Number(state.seed), activeData.heightField, activeData.threshold)) {
+    if (globe3D && globe3D.ready && globe3D.render(globeTextureCanvas, textureRevision, state.rotation, state.rotationX, radius, w, h, cy, Number(state.seed), activeData.heightField, activeData.threshold)) {
       drawCivilizationGlobe(cx, cy, radius);
       return;
     }
@@ -813,35 +945,47 @@
     return buildBoundaryPolylines(edges);
   }
 
-  function drawPoliticalBorders(w, h, outW, outH) {
-    if (!activeData || ["heightmap","tectonics","temperature","moisture"].includes(state.layer) || (!state.showBorders && state.layer !== "political")) return;
-    if (vectorBorderCacheRevision !== textureRevision) {
-      vectorBorderCache = buildPoliticalBoundaryPaths(activeData);
-      vectorBorderCacheRevision = textureRevision;
+  function currentBoundaryPaths(){
+    if(vectorBorderCacheRevision!==textureRevision){
+      vectorBorderCache=buildPoliticalBoundaryPaths(activeData);
+      vectorBorderCacheRevision=textureRevision;
     }
-    if (!vectorBorderCache || !vectorBorderCache.length) return;
-    const dpr = window.devicePixelRatio || 1, left = (w - outW) / 2, top = (h - outH) / 2;
-    const drawPaths = () => {
-      mapCtx.beginPath();
-      for (const points of vectorBorderCache) {
-        const point = p => ({ x: left + p[0] / MAP_W * outW, y: top + p[1] / MAP_H * outH });
-        const first = point(points[0]), last = point(points[points.length - 1]);
-        mapCtx.moveTo(first.x, first.y);
-        if (points.length === 2) { mapCtx.lineTo(last.x, last.y); continue; }
-        for (let i = 1; i < points.length - 1; i++) {
-          const current = point(points[i]), next = point(points[i + 1]);
-          mapCtx.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+    return vectorBorderCache||[];
+  }
+  function renderPoliticalPaths(context,paths,width,height,left,top,outW,outH,lineScale,politicalLayer){
+    if(!paths||!paths.length)return;
+    const drawPaths=()=>{
+      context.beginPath();
+      for(const points of paths){
+        const point=p=>({x:left+p[0]/MAP_W*outW,y:top+p[1]/MAP_H*outH});
+        const first=point(points[0]),last=point(points[points.length-1]);
+        context.moveTo(first.x,first.y);
+        if(points.length===2){context.lineTo(last.x,last.y);continue;}
+        for(let i=1;i<points.length-1;i++){
+          const current=point(points[i]),next=point(points[i+1]);
+          context.quadraticCurveTo(current.x,current.y,(current.x+next.x)/2,(current.y+next.y)/2);
         }
-        mapCtx.lineTo(last.x, last.y);
+        context.lineTo(last.x,last.y);
       }
-      mapCtx.stroke();
+      context.stroke();
     };
-    mapCtx.save();
-    mapCtx.lineCap = "round"; mapCtx.lineJoin = "round";
-    mapCtx.strokeStyle = "rgba(15, 20, 17, .88)"; mapCtx.lineWidth = 2.15 * dpr; drawPaths();
-    mapCtx.strokeStyle = state.layer === "political" ? "rgba(229, 219, 196, .96)" : "rgba(194, 204, 192, .82)";
-    mapCtx.lineWidth = (state.layer === "political" ? 1.05 : .78) * dpr; drawPaths();
-    mapCtx.restore();
+    context.save();context.lineCap="round";context.lineJoin="round";
+    context.strokeStyle="rgba(15,20,17,.90)";context.lineWidth=2.15*lineScale;drawPaths();
+    context.strokeStyle=politicalLayer?"rgba(229,219,196,.97)":"rgba(194,204,192,.88)";
+    context.lineWidth=(politicalLayer?1.05:.78)*lineScale;drawPaths();
+    context.restore();
+  }
+  function renderGlobeTexture(){
+    const width=globeTextureCanvas.width,height=globeTextureCanvas.height;
+    globeTextureCtx.clearRect(0,0,width,height);
+    globeTextureCtx.drawImage(textureCanvas,0,0,width,height);
+    if(!activeData||["heightmap","tectonics","temperature","moisture"].includes(state.layer)||(!state.showBorders&&state.layer!=="political"))return;
+    renderPoliticalPaths(globeTextureCtx,currentBoundaryPaths(),width,height,0,0,width,height,2,state.layer==="political");
+  }
+  function drawPoliticalBorders(w,h,outW,outH){
+    if(!activeData||["heightmap","tectonics","temperature","moisture"].includes(state.layer)||(!state.showBorders&&state.layer!=="political"))return;
+    const dpr=window.devicePixelRatio||1,left=(w-outW)/2,top=(h-outH)/2;
+    renderPoliticalPaths(mapCtx,currentBoundaryPaths(),w,h,left,top,outW,outH,dpr,state.layer==="political");
   }
 
   function drawCivilizationGlobe(cx, cy, radius) {
@@ -1042,9 +1186,13 @@
     $("terrainEditorHint").textContent = state.editTerrain ? "Кисть активна: рисуйте по карте мира. Биомы и климат обновятся после завершения мазка." : "Переключитесь на «Карта мира», включите кисть и рисуйте мышью или пальцем.";
     mapCanvas.classList.toggle("painting",state.view==="map"&&(state.editBorders||state.editTerrain));
     mapCanvas.dataset.terrainEditing=String(state.view==="map"&&state.editTerrain);
+    state.selectedCountry=resolveCountryId(state.selectedCountry);
+    state.borderCountry=resolveCountryId(state.borderCountry);
     $("borderCountrySelect").value = String(state.borderCountry);
     $("borderEditorHint").textContent = state.editBorders ? "Кисть активна: нажмите и ведите по суше на карте." : "Включите кисть и выберите государство, чтобы рисовать границы.";
-    mapCanvas.classList.toggle("painting", state.view === "map" && state.editBorders);
+    $("moveCapitalToggle").checked=state.moveCapital;
+    if(activeData&&document.activeElement!==$("countryNameInput"))$("countryNameInput").value=countryDisplayName(activeData,state.selectedCountry);
+    mapCanvas.classList.toggle("painting", state.view === "map" && (state.editBorders||state.editTerrain||state.moveCapital));
     $("showRivers").checked = state.showRivers;
     $("showLakes").checked = state.showLakes;
     $("showDeltas").checked = state.showDeltas;
@@ -1193,7 +1341,7 @@
   function projectJSON() {
     return {
       format: "planetforge-world",
-      version: 3,
+      version: 4,
       name: state.name,
       seed: Number(state.seed),
       preset: state.preset,
@@ -1202,9 +1350,12 @@
       customCities: state.customCities,
       cityNames: state.cityNames,
       customTerritories: state.customTerritories,
+      countryNames: state.countryNames,
+      countryMerges: state.countryMerges,
+      countryCapitals: state.countryCapitals,
       customHeightOverrides: state.customHeightOverrides,
       terrainBrush: { mode: state.terrainBrush, size: state.terrainBrushSize, strength: state.terrainBrushStrength },
-      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders, editBorders: state.editBorders, editTerrain: state.editTerrain, borderCountry: state.borderCountry },
+      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders, editBorders: state.editBorders, editTerrain: state.editTerrain, borderCountry: state.borderCountry, selectedCountry: state.selectedCountry, moveCapital: state.moveCapital },
       exportedAt: new Date().toISOString()
     };
   }
@@ -1512,17 +1663,26 @@
     state.terrainBrush=["raise","lower","smooth","plateau","crater","land","water"].includes(brush.mode)?brush.mode:"raise";
     state.terrainBrushSize=clampInt(brush.size,2,28,8);
     state.terrainBrushStrength=clampInt(brush.strength,5,100,45);
+    state.countryNames={};
+    if(input.countryNames&&typeof input.countryNames==="object"&&!Array.isArray(input.countryNames))Object.entries(input.countryNames).slice(0,32).forEach(([key,value])=>{if(/^\d+$/.test(key)&&Number(key)<32)state.countryNames[key]=String(value||"").trim().slice(0,48);});
+    state.countryMerges={};
+    if(input.countryMerges&&typeof input.countryMerges==="object"&&!Array.isArray(input.countryMerges))Object.entries(input.countryMerges).slice(0,32).forEach(([key,value])=>{const source=Number(key),target=Number(value);if(/^\d+$/.test(key)&&Number.isInteger(source)&&source>=0&&source<32&&Number.isInteger(target)&&target>=0&&target<32&&source!==target)state.countryMerges[String(source)]=target;});
+    state.countryCapitals={};
+    if(input.countryCapitals&&typeof input.countryCapitals==="object"&&!Array.isArray(input.countryCapitals))Object.entries(input.countryCapitals).slice(0,32).forEach(([key,value])=>{const id=Number(key);if(/^\d+$/.test(key)&&id>=0&&id<32&&value&&typeof value==="object")state.countryCapitals[key]={x:clampInt(value.x,0,MAP_W-1,0),y:clampInt(value.y,0,MAP_H-1,0)};});
     state.customTerritories = {};
     if(input.customTerritories&&typeof input.customTerritories==="object"&&!Array.isArray(input.customTerritories)){
       Object.entries(input.customTerritories).slice(0,MAP_W*MAP_H).forEach(([key,value])=>{
         const index=Number(key),country=Number(value);
-        if(/^\d+$/.test(key)&&index>=0&&index<MAP_W*MAP_H&&Number.isInteger(country)&&country>=0&&country<6)state.customTerritories[key]=country;
+        if(/^\d+$/.test(key)&&index>=0&&index<MAP_W*MAP_H&&Number.isInteger(country)&&country>=0&&country<32)state.customTerritories[key]=country;
       });
     }
     state.editBorders = !!(input.view&&input.view.editBorders);
     state.editTerrain = !!(input.view&&input.view.editTerrain);
+    state.moveCapital = !!(input.view&&input.view.moveCapital);
     if(state.editTerrain&&state.editBorders)state.editBorders=false;
-    state.borderCountry = clampInt(input.view&&input.view.borderCountry,0,5,0);
+    if(state.moveCapital){state.editBorders=false;state.editTerrain=false;}
+    state.selectedCountry = clampInt(input.view&&input.view.selectedCountry,0,31,0);
+    state.borderCountry = clampInt(input.view&&input.view.borderCountry,0,31,0);
     state.cityNames = {};
     if(input.cityNames&&typeof input.cityNames==="object"&&!Array.isArray(input.cityNames))Object.keys(input.cityNames).slice(0,100).forEach(key=>{if(/^\d+$/.test(key))state.cityNames[key]=String(input.cityNames[key]).slice(0,48);});
     state.layer = input.view && ["biome", "elevation", "heightmap", "tectonics", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
@@ -1674,7 +1834,20 @@
     checkpointHistory();state.customHeightOverrides={};state.editTerrain=false;updateInterface();scheduleGenerate();showToast("Рельеф восстановлен по генератору");
   });
   $("borderCountrySelect").addEventListener("change",()=>{
-    state.borderCountry=clampInt($("borderCountrySelect").value,0,5,0);scheduleAutosave();
+    const selected=resolveCountryId($("borderCountrySelect").value);
+    state.borderCountry=selected;state.selectedCountry=selected;
+    if(activeData)updateCountryEditor(activeData);
+    if(activeData){drawTexture();renderCurrentView();}
+    scheduleAutosave();
+  });
+  $("renameCountryBtn").addEventListener("click",renameSelectedCountry);
+  $("mergeCountryBtn").addEventListener("click",mergeSelectedCountry);
+  $("splitCountryBtn").addEventListener("click",splitSelectedCountry);
+  $("moveCapitalToggle").addEventListener("change",()=>{
+    checkpointHistory();state.moveCapital=$("moveCapitalToggle").checked;
+    if(state.moveCapital){state.editBorders=false;state.editTerrain=false;if(state.view!=="map")setView("map");}
+    updateInterface();
+    showToast(state.moveCapital?"Нажмите на сушу карты, чтобы перенести столицу":"Перенос столицы выключен");
   });
   [["showRivers", "showRivers"], ["showLakes", "showLakes"], ["showDeltas", "showDeltas"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
     $(id).addEventListener("change", () => {
@@ -1762,6 +1935,79 @@
     }
   });
 
+  function selectCountry(id){
+    const selected=resolveCountryId(id);
+    state.selectedCountry=selected;state.borderCountry=selected;
+    if(activeData)updateBorderCountryOptions(activeData);
+    if(activeData){drawTexture();renderCurrentView();}
+    updateInterface();scheduleAutosave();
+  }
+  function selectCountryAtPoint(point){
+    if(!activeData||state.editBorders||state.editTerrain||state.moveCapital)return;
+    const cell=mapCellFromPoint(point),index=cell.y*MAP_W+cell.x;
+    if(activeData.heightField[index]<=activeData.threshold||activeData.territories[index]===255)return;
+    selectCountry(activeData.territories[index]);
+  }
+  function moveSelectedCapitalTo(cell){
+    if(!activeData)return;
+    const index=cell.y*MAP_W+cell.x;
+    if(activeData.heightField[index]<=activeData.threshold){showToast("Столицу можно переносить только на сушу");return;}
+    const country=resolveCountryId(state.selectedCountry);
+    checkpointHistory();
+    state.countryCapitals[String(country)]={x:cell.x,y:cell.y};
+    if(country>=6)state.customTerritories[String(index)]=country;
+    state.moveCapital=false;
+    refreshCivilization();
+    updateInterface();
+    showToast("Столица перемещена; территории пересчитаны");
+  }
+  function renameSelectedCountry(){
+    if(!activeData)return;
+    const country=resolveCountryId(state.selectedCountry),name=$("countryNameInput").value.trim().slice(0,48);
+    if(!name){showToast("Название страны не должно быть пустым");return;}
+    checkpointHistory();state.countryNames[String(country)]=name;
+    refreshCivilization();showToast("Государство переименовано");
+  }
+  function mergeSelectedCountry(){
+    if(!activeData)return;
+    const source=resolveCountryId(state.selectedCountry),target=resolveCountryId($("mergeCountrySelect").value);
+    if(!Number.isInteger(target)||target<0||target>=32||source===target){showToast("Выберите другое государство для объединения");return;}
+    const exists=activeData.territories.some(value=>value!==255&&resolveCountryId(value)===target);
+    if(!exists){showToast("Выбранная страна больше не имеет территории");return;}
+    checkpointHistory();
+    state.countryMerges[String(source)]=target;
+    state.selectedCountry=target;state.borderCountry=target;state.moveCapital=false;
+    refreshCivilization();showToast("Государства объединены");
+  }
+  function splitSelectedCountry(){
+    if(!activeData)return;
+    const source=resolveCountryId(state.selectedCountry),cells=[];
+    for(let i=0;i<activeData.territories.length;i++)if(activeData.territories[i]!==255&&resolveCountryId(activeData.territories[i])===source&&activeData.heightField[i]>activeData.threshold)cells.push(i);
+    if(cells.length<80){showToast("На выбранной территории недостаточно суши для разделения");return;}
+    const occupied=new Set();
+    for(let i=0;i<activeData.territories.length;i++)if(activeData.territories[i]!==255)occupied.add(resolveCountryId(activeData.territories[i]));
+    for(const key of Object.keys(state.countryCapitals||{}))occupied.add(Number(key));
+    for(const key of Object.keys(state.countryMerges||{}))occupied.add(Number(key));
+    for(const value of Object.values(state.countryMerges||{}))occupied.add(Number(value));
+    let next=-1;for(let id=6;id<32;id++)if(!occupied.has(id)){next=id;break;}
+    if(next<0){showToast("Достигнут предел пользовательских государств (32)");return;}
+    let sin=0,cos=0;
+    for(const index of cells){const x=index%MAP_W,angle=(x+.5)/MAP_W*TAU;sin+=Math.sin(angle);cos+=Math.cos(angle);}
+    const center=((Math.atan2(sin,cos)/TAU*MAP_W)%MAP_W+MAP_W)%MAP_W;
+    const offset=index=>{const x=index%MAP_W;return(x-center+MAP_W)%MAP_W;};
+    cells.sort((a,b)=>offset(a)-offset(b)||Math.floor(a/MAP_W)-Math.floor(b/MAP_W));
+    const newCells=cells.slice(Math.floor(cells.length/2));
+    if(newCells.length<30||cells.length-newCells.length<30){showToast("Выбранная область слишком мала для разделения");return;}
+    const capitalIndex=newCells[Math.floor(newCells.length/2)],x=capitalIndex%MAP_W,y=Math.floor(capitalIndex/MAP_W);
+    checkpointHistory();
+    for(const index of newCells)state.customTerritories[String(index)]=next;
+    state.countryNames[String(next)]="Новое государство "+(next-5);
+    state.countryCapitals[String(next)]={x,y};
+    state.selectedCountry=next;state.borderCountry=next;state.moveCapital=false;
+    refreshCivilization();updateInterface();
+    showToast("Создано новое государство; граница раздела сохранена");
+  }
+
   function mapCellFromPoint(point){
     return{x:((Math.floor((point.lon+180)/360*MAP_W)%MAP_W)+MAP_W)%MAP_W,y:clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1)};
   }
@@ -1834,7 +2080,7 @@
   }
   function paintBorderSegment(start,end){
     if(!activeData||!state.editBorders||state.view!=="map")return;
-    const country=clampInt(state.borderCountry,0,Math.max(0,activeData.countryCount-1),0),changed=new Set();
+    const country=resolveCountryId(clampInt(state.borderCountry,0,31,0)),changed=new Set();
     let dx=end.x-start.x;if(dx>MAP_W/2)dx-=MAP_W;else if(dx< -MAP_W/2)dx+=MAP_W;
     const dy=end.y-start.y,steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))));
     for(let step=0;step<=steps;step++){
@@ -1915,6 +2161,10 @@
   };
   canvas.addEventListener("pointerup", endPointer);
   canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("click",event=>{
+    if(dragMoved||state.view!=="globe"||state.moveCapital)return;
+    const point=pointerCoordinates(event);if(point)selectCountryAtPoint(point);
+  });
   canvas.addEventListener("dblclick", editOrAddCity);
   mapCanvas.addEventListener("pointerdown", event=>{
     if(state.editTerrain&&state.view==="map"&&event.button===0){
@@ -1925,9 +2175,12 @@
       terrainStrokeOverrideCount=Object.keys(state.customHeightOverrides).length;
       terrainPaintAt=performance.now();mapCanvas.setPointerCapture(event.pointerId);paintTerrainSegment(lastTerrainPaintPoint,lastTerrainPaintPoint);return;
     }
-    if(!state.editBorders||state.view!=="map"||event.button!==0)return;
+    if(event.button!==0||state.view!=="map")return;
     const point=pointerCoordinates(event);if(!point)return;
-    event.preventDefault();checkpointHistory();borderPaintPointer=event.pointerId;lastBorderPaintPoint=mapCellFromPoint(point);lastBorderPaintAt=performance.now();
+    const cell=mapCellFromPoint(point);
+    if(state.moveCapital){moveSelectedCapitalTo(cell);return;}
+    if(!state.editBorders)return;
+    event.preventDefault();checkpointHistory();borderPaintPointer=event.pointerId;lastBorderPaintPoint=cell;lastBorderPaintAt=performance.now();
     mapCanvas.setPointerCapture(event.pointerId);paintBorderSegment(lastBorderPaintPoint,lastBorderPaintPoint);
   });
   mapCanvas.addEventListener("pointermove", event=>{

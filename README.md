@@ -17,7 +17,7 @@
 - **Season control and terrain-aware moisture** change climate and biome distribution.
 - **Priority-flood drainage** to route rivers through closed depressions, visualize basin-fill lakes, and mark high-flow river deltas at shorelines.
 - **City editing:** double-click land to add settlements or double-click an existing city to rename it; type `DELETE` to remove a user-created settlement.
-- **Manual political borders:** turn on the border brush in map view, select a country, and paint land cells. Painted cells persist in project JSON, share links, auto-save, and undo/redo history.
+- **Political country editor:** select a country on the globe or map, rename it independently of its capital, move capitals, merge countries, split a land territory into a new state, and paint borders. Country names, merge aliases, capital locations, and painted cells persist in project JSON, share links, auto-save, and undo/redo history.
 - **Undo/redo**, toolbar controls, Ctrl/Cmd+Z and Ctrl/Cmd+Y.
 - **Share links** that encode project settings and custom settlements in the URL hash, without server storage.
 - **Curated world gallery:** twelve named example planets with fixed seeds and category filters/search; examples can be opened, edited, saved, and shared entirely offline.
@@ -87,8 +87,8 @@ PlanetForge/
 - Plain HTML, CSS, and JavaScript. Terrain fields are generated in a Web Worker when supported, with a deterministic synchronous fallback. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
 - A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
 - Latitude, elevation, orbital season, temperature, terrain-aware moisture, coastal moderation, and stylized prevailing-wind/rain-shadow effects feed into the biome classifier.
-- The globe uses an equirectangular texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays.
-- River drainage uses a priority-flood approximation. Political territories start from spherical capital regions, then receive a deterministic low-frequency spherical warp to avoid diagram-like arcs; the equirectangular map draws shared boundaries as smoothed vector paths. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
+- The globe uses a 2x equirectangular atlas texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays. The flat map and globe share cached, smoothed political-boundary paths.
+- River drainage uses a priority-flood approximation. Political territories start from spherical capital regions, then receive a deterministic low-frequency spherical warp to avoid diagram-like arcs; the equirectangular map and 2x globe atlas draw the same shared vector boundaries. Climate, tectonics, terrain relaxation, and drainage remain stylized procedural models, not validated scientific simulations.
 - Seed-based world generation is deterministic for a given version and set of settings. Future generator changes may intentionally change the resulting surface.
 - Climate and physical values are **procedural estimates for fictional worlds**, not a validated climate or planetary-science simulation.
 
