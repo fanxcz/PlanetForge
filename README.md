@@ -35,11 +35,13 @@ Then open http://localhost:8000.
 
 The repository includes a GitHub Actions workflow at `.github/workflows/pages.yml` that publishes the static project whenever code is pushed to `main`.
 
-1. Open **Settings → Pages** in this repository.
-2. Under **Build and deployment → Source**, select **GitHub Actions**.
+1. Open [**Settings → Pages**](https://github.com/fanxcz/PlanetForge/settings/pages).
+2. Under **Build and deployment → Source**, select **GitHub Actions** and save the setting.
 3. Open **Actions** and check the **Deploy PlanetForge to GitHub Pages** workflow.
 
-After the first successful deployment, the site should be available at https://fanxcz.github.io/PlanetForge/. Updates pushed to `main` deploy automatically.
+**Important:** GitHub currently does not allow this workflow token to create the Pages site on its own. Enable Pages once in Settings first; otherwise the workflow stops at “Configure GitHub Pages” with a “Not Found” error. Once Pages is enabled, every push to `main` runs the syntax checks, smoke tests, and deployment automatically.
+
+After a successful deployment, the site should be available at https://fanxcz.github.io/PlanetForge/.
 
 ## Project structure
 
