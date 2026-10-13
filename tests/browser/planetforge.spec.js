@@ -152,3 +152,16 @@ test("globe drag rotates both axes in the direction of the pointer", async ({ pa
   expect(angles.pitch).toBeGreaterThan(0);
   expect(angles.dragging).toBeUndefined();
 });
+
+test("political map uses clear country frontiers without page errors", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+  await openReadyWorld(page);
+  await page.locator('.view-tab[data-view="map"]').click();
+  await page.locator("#mapLayer").selectOption("political");
+  await expect(page.locator("#mapCanvas")).toBeVisible();
+  await expect(page.locator("#planetCanvas")).toBeHidden();
+  await expect(page.locator("#mapCanvas")).toHaveJSProperty("width", 512);
+  await expect(page.locator("#mapCanvas")).toHaveJSProperty("height", 256);
+  expect(pageErrors).toEqual([]);
+});

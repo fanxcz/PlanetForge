@@ -159,9 +159,10 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  // Muted atlas colors distinguish countries without competing with terrain.
   const COUNTRY_COLORS = [
-    [55, 132, 148], [119, 103, 172], [169, 121, 67],
-    [73, 142, 105], [170, 88, 103], [76, 119, 173]
+    [105, 133, 125], [145, 133, 111], [105, 124, 151],
+    [158, 119, 105], [139, 143, 111], [135, 119, 146]
   ];
 
   function generateRivers(height,threshold,seed){
@@ -548,16 +549,36 @@
           color[1] = Math.round(color[1] * hillShade);
           color[2] = Math.round(color[2] * hillShade);
         }
-        if (!pureLayer && borders && borders[i] && (state.showBorders || state.layer === "political")) {
-          const mix = state.layer === "political" ? 0.72 : 0.38;
-          color[0] = Math.round(lerp(color[0], 196, mix));
-          color[1] = Math.round(lerp(color[1], 225, mix));
-          color[2] = Math.round(lerp(color[2], 227, mix));
-        }
         if (!pureLayer && lakeMask && lakeMask[i] && (state.showLakes || state.layer === "hydrology")) color = [42, 127, 170];
         if (!pureLayer && deltaMask && deltaMask[i] && (state.showDeltas || state.layer === "hydrology")) color = [88, 182, 160];
         if (!pureLayer && riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
           color = state.layer === "hydrology" ? [75, 201, 229] : [76, 181, 211];
+        }
+
+        // Draw borders as a fine double line: a dark casing protects legibility
+        // over every biome, with a quiet warm highlight on the actual frontier.
+        if (!pureLayer && borders && (state.showBorders || state.layer === "political")) {
+          const left = y * MAP_W + (x - 1 + MAP_W) % MAP_W;
+          const right = y * MAP_W + (x + 1) % MAP_W;
+          const up = Math.max(0, y - 1) * MAP_W + x;
+          const down = Math.min(MAP_H - 1, y + 1) * MAP_W + x;
+          const isCore = borders[i] !== 0;
+          const borderHalo = !isCore && (
+            borders[left] || borders[right] || borders[up] || borders[down]
+          );
+          if (isCore) {
+            const mix = state.layer === "political" ? 0.86 : 0.54;
+            const edge = state.layer === "political" ? [229, 219, 196] : [194, 204, 192];
+            color[0] = Math.round(lerp(color[0], edge[0], mix));
+            color[1] = Math.round(lerp(color[1], edge[1], mix));
+            color[2] = Math.round(lerp(color[2], edge[2], mix));
+          } else if (borderHalo) {
+            const mix = state.layer === "political" ? 0.9 : 0.57;
+            const casing = state.layer === "political" ? [24, 30, 32] : [22, 31, 32];
+            color[0] = Math.round(lerp(color[0], casing[0], mix));
+            color[1] = Math.round(lerp(color[1], casing[1], mix));
+            color[2] = Math.round(lerp(color[2], casing[2], mix));
+          }
         }
         const j = i * 4;
         texturePixels[j] = color[0];
