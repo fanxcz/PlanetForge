@@ -57,12 +57,18 @@ assert.ok(a.counts.reduce((sum,n)=>sum+n,0)===96*48,"Biome counts should cover e
 assert.deepEqual(Array.from(a.heightField),Array.from(b.heightField),"Same seed/settings should generate identical terrain");
 assert.deepEqual(Array.from(a.biome),Array.from(b.biome),"Same seed/settings should generate identical biomes");
 assert.equal(typeof globalThis.PlanetForgeGenerator.renderTexture,"function","Generator API must expose the texture renderer used by the export Worker");
+assert.equal(typeof globalThis.PlanetForgeGenerator.renderTexturePack,"function","Generator API must expose a shared-field multi-layer renderer");
 const texture=globalThis.PlanetForgeGenerator.renderTexture(config,"biome",{baseWidth:96,baseHeight:48});
 assert.equal(texture.width,96);
 assert.equal(texture.height,48);
 assert.equal(texture.pixels.length,96*48*4,"Rendered texture should contain RGBA pixels");
 assert.ok(texture.pixels.every((value,index)=>index%4!==3||value===255),"Every exported texel should be fully opaque");
 assert.deepEqual(Array.from(texture.pixels),Array.from(globalThis.PlanetForgeGenerator.renderTexture(config,"biome",{baseWidth:96,baseHeight:48}).pixels),"Texture generation should be deterministic");
+const pack=globalThis.PlanetForgeGenerator.renderTexturePack(config,["biome","heightmap","tectonics"],{baseWidth:96,baseHeight:48});
+assert.equal(pack.length,3,"World pack should render each requested layer");
+assert.deepEqual(pack.map(layer=>layer.layer),["biome","heightmap","tectonics"]);
+assert.equal(pack[1].pixels.length,96*48*4);
+assert.equal(pack[2].pixels.length,96*48*4);
 const temperatureTexture=globalThis.PlanetForgeGenerator.renderTexture(config,"temperature",{baseWidth:96,baseHeight:48});
 assert.notDeepEqual(Array.from(texture.pixels),Array.from(temperatureTexture.pixels),"Different map layers must render different data");
 const detailConfig={...config,width:192,height:96};

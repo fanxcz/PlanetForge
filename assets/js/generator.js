@@ -20,11 +20,12 @@ const TEMP_STOPS=[[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179
 const MOIST_STOPS=[[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
 const TECTONIC_STOPS=[[0,[18,31,43]],[.08,[31,66,80]],[.22,[70,120,116]],[.45,[181,139,85]],[.7,[216,107,70]],[1,[239,70,63]]];
 function hueColor(t,stops){t=clamp(t,0,1);for(let i=1;i<stops.length;i++)if(t<=stops[i][0]){const a=stops[i-1],b=stops[i],q=(t-a[0])/Math.max(.00001,b[0]-a[0]);return[Math.round(lerp(a[1][0],b[1][0],q)),Math.round(lerp(a[1][1],b[1][1],q)),Math.round(lerp(a[1][2],b[1][2],q))];}return stops[stops.length-1][1].slice();}
-function renderTexture(config,layer="biome",options={}){
- const fields=generateFields(config),W=fields.width,H=fields.height,size=W*H,threshold=fields.threshold;
+function renderTextureFromFields(fields,layer="biome",options={}){
+ const W=fields.width,H=fields.height,size=W*H,threshold=fields.threshold;
  const pixels=new Uint8ClampedArray(size*4),baseW=Math.max(1,Number(options.baseWidth)||512),baseH=Math.max(1,Number(options.baseHeight)||256);
  const riverMask=options.riverMask,lakeMask=options.lakeMask,deltaMask=options.deltaMask,territories=options.territories,borders=options.borders;
  const showRivers=options.showRivers!==false,showLakes=options.showLakes!==false,showDeltas=options.showDeltas!==false,showBorders=options.showBorders!==false;
+ const pureLayer=["heightmap","tectonics","temperature","moisture"].includes(layer);
  for(let y=0;y<H;y++){const baseY=Math.min(baseH-1,Math.floor(y/H*baseH));
   for(let x=0;x<W;x++){
    const i=y*W+x,h=fields.heightField[i],left=y*W+Math.max(0,x-1),right=y*W+Math.min(W-1,x+1);
@@ -39,14 +40,19 @@ function renderTexture(config,layer="biome",options={}){
    else if(layer==="hydrology")color=h<=threshold?[Math.round(8+clamp((threshold-h)*95,0,20)),Math.round(27+clamp((threshold-h)*110,0,30)),Math.round(47+clamp((threshold-h)*150,0,45))]:hueColor(clamp((h-threshold+.18)/.46,0,1),HEIGHT_STOPS);
    else if(layer==="political"){const owner=territories?territories[baseIndex]:255;color=h<=threshold?[7,17,29]:(owner!==255&&owner!==undefined?COUNTRY_COLORS[owner%COUNTRY_COLORS.length].slice():[91,99,105]);}
    else{color=BIOME_COLORS[fields.biome[i]].slice();const ocean=fields.biome[i]<=2,shade=ocean?clamp(.87+(threshold-h)*.9,.75,1.02):slope;color[0]=Math.round(color[0]*shade);color[1]=Math.round(color[1]*shade);color[2]=Math.round(color[2]*shade);}
-   if(borders&&borders[baseIndex]&&(showBorders||layer==="political")){const mix=layer==="political"?.72:.38;color[0]=Math.round(lerp(color[0],196,mix));color[1]=Math.round(lerp(color[1],225,mix));color[2]=Math.round(lerp(color[2],227,mix));}
-   if(lakeMask&&lakeMask[baseIndex]&&(showLakes||layer==="hydrology"))color=[42,127,170];
-   if(deltaMask&&deltaMask[baseIndex]&&(showDeltas||layer==="hydrology"))color=[88,182,160];
-   if(riverMask&&riverMask[baseIndex]&&(showRivers||layer==="hydrology"))color=layer==="hydrology"?[75,201,229]:[76,181,211];
+   if(!pureLayer&&borders&&borders[baseIndex]&&(showBorders||layer==="political")){const mix=layer==="political"?.72:.38;color[0]=Math.round(lerp(color[0],196,mix));color[1]=Math.round(lerp(color[1],225,mix));color[2]=Math.round(lerp(color[2],227,mix));}
+   if(!pureLayer&&lakeMask&&lakeMask[baseIndex]&&(showLakes||layer==="hydrology"))color=[42,127,170];
+   if(!pureLayer&&deltaMask&&deltaMask[baseIndex]&&(showDeltas||layer==="hydrology"))color=[88,182,160];
+   if(!pureLayer&&riverMask&&riverMask[baseIndex]&&(showRivers||layer==="hydrology"))color=layer==="hydrology"?[75,201,229]:[76,181,211];
    const out=i*4;pixels[out]=color[0];pixels[out+1]=color[1];pixels[out+2]=color[2];pixels[out+3]=255;
   }
  }
  return{width:W,height:H,pixels};
+}
+function renderTexture(config,layer="biome",options={}){return renderTextureFromFields(generateFields(config),layer,options);}
+function renderTexturePack(config,layers,options={}){
+ const fields=generateFields(config);
+ return(Array.isArray(layers)?layers:[]).map(layer=>({layer,...renderTextureFromFields(fields,String(layer),options)}));
 }
 function generateFields(config){
  const W=Math.max(32,Math.min(4096,Math.round(Number(config.width)||512))),H=Math.max(16,Math.min(2048,Math.round(Number(config.height)||256)));
@@ -101,5 +107,5 @@ function generateFields(config){
  return{width:W,height:H,seed,heightField:height,temperature,moisture,tectonicField,biome,counts,landCount,totalTemp,threshold};
 }
 const root=typeof self!=="undefined"?self:globalThis;
-root.PlanetForgeGenerator={generateFields,renderTexture};
+root.PlanetForgeGenerator={generateFields,renderTexture,renderTexturePack};
 })();
