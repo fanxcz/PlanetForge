@@ -90,15 +90,38 @@ function generateFields(config){
   }
   height.set(source);
  }
+ // Sparse absolute heights are applied before climate classification, so climate,
+ // biome IDs and hydrology can be regenerated from edited elevation.
+ const heightOverrides=config.heightOverrides;
+ if(heightOverrides&&typeof heightOverrides==="object"){
+  let applied=0;
+  for(const [key,value] of Object.entries(heightOverrides)){
+   if(applied>=18000)break;
+   if(!/^\\d+$/.test(key))continue;
+   const index=Number(key),elevation=Number(value);
+   if(index<0||index>=size||!Number.isFinite(elevation))continue;
+   height[index]=clamp(elevation,0,1.15);applied++;
+  }
+ }
  let landCount=0,totalTemp=0;
  for(let y=0;y<H;y++){
   const lat=Math.PI/2-((y+.5)/H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat),absLat=Math.abs(lat*180/Math.PI);
   for(let x=0;x<W;x++){
    const lon=((x+.5)/W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon),idx=y*W+x;
    const h=height[idx],alt=h-threshold,seasonal=-Math.cos(seasonPhase)*Math.sin(lat)*12;
-   const t=30-absLat*.48+tempOffset+seasonal-Math.max(0,alt)*130,rain=fbm3(sx,sy,sz,4.7,2,seed+1907);
-   const east=height[y*W+(x+2)%W],west=height[y*W+(x-2+W)%W],windward=clamp(.5+(east-west)*1.8,0,1);
-   const wet=clamp(humidity*.58+rain*.25+(1-Math.abs(latSin))*.15+windward*.12-Math.max(0,alt)*.18,0,1);
+   const ocean=h<=threshold,east=height[y*W+(x+2)%W],west=height[y*W+(x-2+W)%W];
+    const windward=clamp(.5+(h-west)*3.2,0,1),leeward=clamp((west-h)*3.2,0,1);
+    const rowUp=Math.max(0,y-1)*W,rowDown=Math.min(H-1,y+1)*W;
+    let nearbyOcean=0;
+    if(height[y*W+(x-1+W)%W]<=threshold)nearbyOcean++;
+    if(height[y*W+(x+1)%W]<=threshold)nearbyOcean++;
+    if(height[rowUp+x]<=threshold)nearbyOcean++;
+    if(height[rowDown+x]<=threshold)nearbyOcean++;
+    const coastal=nearbyOcean/4;
+    const t=30-absLat*.48+tempOffset+seasonal*(ocean?.58:1)-Math.max(0,alt)*130+coastal*1.6;
+    const rain=fbm3(sx,sy,sz,4.7,2,seed+1907);
+   /* windward and leeward exposure calculated above */
+   const wet=clamp(humidity*.54+rain*.23+(1-Math.abs(latSin))*.14+windward*.12-leeward*.065+coastal*.12-Math.max(0,alt)*.14,0,1);
    temperature[idx]=t;moisture[idx]=wet;totalTemp+=t;
    let b;if(h<=threshold)b=t<-8?2:(h>threshold-.035?1:0);else if(t<-16)b=3;else if(t<-1)b=4;else if(alt>.135-relief*.0085)b=5;else if(wet<.22&&t>7)b=6;else if(t<7&&wet>.40)b=11;else if(wet<.38&&t>16)b=7;else if(wet>.78&&t>17)b=10;else if(wet>.51&&t>4)b=9;else b=8;
    biome[idx]=b;counts[b]++;if(h>threshold)landCount++;
