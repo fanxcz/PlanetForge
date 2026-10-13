@@ -526,7 +526,7 @@
   }
   function refreshCivilization(){if(!activeData)return;const civ=applyCustomTerritories(applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed)),activeData.heightField,activeData.threshold);Object.assign(activeData,civ);updateBorderCountryOptions(civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();scheduleAutosave();}
   function editOrAddCity(event){
-    if(state.editBorders&&state.view==="map")return;
+    if((state.editBorders||state.moveCapital)&&state.view==="map")return;
     if(!activeData)return;const point=pointerCoordinates(event);if(!point)return;
     const x=clamp(Math.floor((point.lon+180)/360*MAP_W),0,MAP_W-1),y=clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1),lat=90-((y+0.5)/MAP_H)*180;
     const near=(activeData.cities||[]).map(city=>{let dx=Math.abs(city.x-x);dx=Math.min(dx,MAP_W-dx)*Math.cos((lat+city.lat)*.5*Math.PI/180);const dy=city.y-y;return{city,distance:Math.sqrt(dx*dx+dy*dy)};}).sort((a,b)=>a.distance-b.distance)[0];
@@ -1242,7 +1242,7 @@
   }
 
   function setView(view) {
-    if(view!=="map"){state.editBorders=false;state.editTerrain=false;}
+    if(view!=="map"){state.editBorders=false;state.editTerrain=false;state.moveCapital=false;}
     state.view = view;
     document.querySelectorAll(".view-tab").forEach((button) => {
       const active = button.dataset.view === view;
@@ -1956,6 +1956,7 @@
   }
   function selectCountry(id){
     const selected=resolveCountryId(id);
+    $("countryNameInput").blur();
     state.selectedCountry=selected;state.borderCountry=selected;
     if(activeData)updateBorderCountryOptions(activeData);
     if(activeData){drawTexture();renderCurrentView();}
@@ -1972,6 +1973,7 @@
     const index=cell.y*MAP_W+cell.x;
     if(activeData.heightField[index]<=activeData.threshold){showToast("Столицу можно переносить только на сушу");return;}
     const country=resolveCountryId(state.selectedCountry);
+    if(country>=6&&resolveCountryId(activeData.territories[index])!==country){showToast("Столицу пользовательского государства можно переносить только внутри его территории");return;}
     checkpointHistory();
     state.countryCapitals[String(country)]={x:cell.x,y:cell.y};
     if(country>=6)state.customTerritories[String(index)]=country;
