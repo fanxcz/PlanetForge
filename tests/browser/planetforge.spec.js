@@ -24,6 +24,7 @@ test("terrain brush persists edits and Undo/Redo restores them", async ({ page }
   await page.locator("#terrainEditorDetails summary").click();
   await page.locator("#editTerrain").check();
   const canvas = page.locator("#mapCanvas");
+  await canvas.scrollIntoViewIfNeeded();
   await expect(canvas).toBeVisible();
   await expect(canvas).toHaveAttribute("data-terrain-editing","true");
   await expect(page.locator("#editTerrain")).toBeChecked();
