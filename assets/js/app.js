@@ -894,6 +894,7 @@
     $("terrainBrushStrengthOut").textContent = state.terrainBrushStrength + "%";
     $("terrainEditorHint").textContent = state.editTerrain ? "Кисть активна: рисуйте по карте мира. Биомы и климат обновятся после завершения мазка." : "Переключитесь на «Карта мира», включите кисть и рисуйте мышью или пальцем.";
     mapCanvas.classList.toggle("painting",state.view==="map"&&(state.editBorders||state.editTerrain));
+    mapCanvas.dataset.terrainEditing=String(state.view==="map"&&state.editTerrain);
     $("borderCountrySelect").value = String(state.borderCountry);
     $("borderEditorHint").textContent = state.editBorders ? "Кисть активна: нажмите и ведите по суше на карте." : "Включите кисть и выберите государство, чтобы рисовать границы.";
     mapCanvas.classList.toggle("painting", state.view === "map" && state.editBorders);
@@ -1492,8 +1493,19 @@
     showToast(state.editBorders?"Кисть границ включена":"Редактирование границ выключено");
   });
   $("editTerrain").addEventListener("change",()=>{
-    checkpointHistory();state.editTerrain=$("editTerrain").checked;
-    if(state.editTerrain){state.editBorders=false;setView("map");}else{updateInterface();renderCurrentView();}
+    checkpointHistory();
+    const enable=$("editTerrain").checked;
+    state.editTerrain=enable;
+    if(enable){
+      state.editBorders=false;
+      setView("map");
+      // Keep the requested tool enabled after the view refresh as well. This
+      // makes mode transitions deterministic when restoring saved edit states.
+      state.editTerrain=true;
+      updateInterface();
+    }else{
+      updateInterface();renderCurrentView();
+    }
     showToast(state.editTerrain?"Кисть рельефа включена":"Редактирование рельефа выключено");
   });
   $("terrainBrushMode").addEventListener("change",()=>{
@@ -1634,7 +1646,7 @@
         changed.add(index);
       }
     }
-    if(changed.size){drawTexture();renderCurrentView();$("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";}
+    if(changed.size){mapCanvas.dataset.terrainCellsChanged=String((Number(mapCanvas.dataset.terrainCellsChanged)||0)+changed.size);drawTexture();renderCurrentView();$("statusText").textContent="Правка рельефа · "+Object.keys(state.customHeightOverrides).length+" изменённых ячеек";}
   }
   function paintTerrainSegment(start,end){
     if(!activeData||!state.editTerrain||state.view!=="map")return;
@@ -1731,6 +1743,7 @@
     if(state.editTerrain&&state.view==="map"&&event.button===0){
       const point=pointerCoordinates(event);if(!point)return;
       event.preventDefault();checkpointHistory();terrainPaintPointer=event.pointerId;lastTerrainPaintPoint=mapCellFromPoint(point);
+      mapCanvas.dataset.terrainPointerStarted="true";
       terrainStrokeBase=activeData.heightField.slice();terrainStrokeTarget=activeData.heightField[lastTerrainPaintPoint.y*MAP_W+lastTerrainPaintPoint.x];
       terrainPaintAt=performance.now();mapCanvas.setPointerCapture(event.pointerId);paintTerrainSegment(lastTerrainPaintPoint,lastTerrainPaintPoint);return;
     }
