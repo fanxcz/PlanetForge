@@ -11,6 +11,7 @@
 - **Interactive globe** with rotation, drag-to-turn, zoom, surface lighting, and coordinate readout.
 - **Six cartography layers:** biome, elevation, temperature, moisture, procedural river networks, and political territories.
 - **WebGL globe renderer** with Canvas 2D fallback, lighting, ocean highlights, procedural clouds, and atmospheric rim lighting.
+- **Off-main-thread terrain generation** via Web Worker; stale slider generations are cancelled, and the deterministic main-thread generator remains as a fallback.
 - **Procedural geology:** seeded plate boundaries, adjustable tectonic activity, and terrain relaxation.
 - **Season control and terrain-aware moisture** change climate and biome distribution.
 - **Priority-flood drainage** to route rivers through closed depressions.
@@ -67,7 +68,7 @@ PlanetForge/
 
 ## Technical notes
 
-- Plain HTML, CSS, and JavaScript. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
+- Plain HTML, CSS, and JavaScript. Terrain fields are generated in a Web Worker when supported, with a deterministic synchronous fallback. The map uses Canvas 2D; the globe uses a custom WebGL 1 renderer with automatic Canvas fallback. No framework or build step is required.
 - A deterministic integer hash and smooth trilinear noise create landforms; seeded spherical plate regions influence boundary elevation.
 - Latitude, elevation, orbital season, temperature, and terrain-aware moisture feed into the biome classifier.
 - The globe uses an equirectangular texture, spherical projection, directional lighting, ocean highlights, and front-hemisphere settlement/route overlays.

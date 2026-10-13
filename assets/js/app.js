@@ -57,6 +57,9 @@
   let exportMenu = null;
   let activeData = null;
   let stats = null;
+  let terrainWorker = null;
+  let pendingTerrainJob = null;
+  let terrainJobSequence = 0;
 
   const state = {
     ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
@@ -312,51 +315,35 @@
     checkpointHistory();state.customCities.push({id:String(Date.now())+"-"+String(Math.floor(Math.random()*100000)),name:name.trim().slice(0,48),x,y});refreshCivilization();showToast("Поселение добавлено на карту");
   }
 
-  function generatePlanet() {
-    const started = performance.now();
-    const seed = Number(state.seed) >>> 0;
+  function terrainSettings() {
+    return {
+      width: MAP_W, height: MAP_H, seed: Number(state.seed) >>> 0,
+      temperature: Number(state.temperature), humidity: Number(state.humidity), relief: Number(state.relief),
+      tectonics: Number(state.tectonics), erosion: Number(state.erosion), season: Number(state.season),
+      seaLevel: Number(state.seaLevel), landmass: Number(state.landmass)
+    };
+  }
+
+  function reportGenerationError(error) {
+    console.error("PlanetForge generation failed:", error);
+    $("renderOverlay").classList.add("hidden");
+    state.isGenerating = false;
+    $("statusText").textContent = "Ошибка генерации";
+    showToast("Не удалось сформировать мир. Попробуйте другой seed.");
+  }
+
+  function finishPlanetFields(fields, started) {
     const size = MAP_W * MAP_H;
-    const height = new Float32Array(size);
-    const temperature = new Float32Array(size);
-    const moisture = new Float32Array(size);
-    const biome = new Uint8Array(size);
-    const tempOffset=Number(state.temperature),humidity=Number(state.humidity)/100,relief=Number(state.relief);
-    const tectonics=Number(state.tectonics)/100,erosion=Number(state.erosion)/100,seasonPhase=Number(state.season)/100*TAU;
-    const threshold=0.535+(Number(state.seaLevel)-50)*0.0042-Number(state.landmass)*0.0045;
-    let landCount=0,totalTemp=0;const counts=new Uint32Array(BIOMES.length);
-    const plateRandom=seededRandom(seed^0x6a09e667);
-    const plates=Array.from({length:14},()=>{const lat=Math.asin(plateRandom()*2-1),lon=plateRandom()*TAU-Math.PI;return{x:Math.cos(lat)*Math.cos(lon),y:Math.sin(lat),z:Math.cos(lat)*Math.sin(lon),continental:plateRandom()>.46,mode:Math.floor(plateRandom()*3)};});
-    for(let y=0;y<MAP_H;y++){const lat=Math.PI/2-((y+.5)/MAP_H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat);
-      for(let x=0;x<MAP_W;x++){const lon=((x+.5)/MAP_W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon);
-        const continent=fbm3(sx,sy,sz,2.25,3,seed+11),detail=fbm3(sx,sy,sz,6.6,2,seed+271),fine=noise3(sx*13.1,sy*13.1,sz*13.1,seed+701);
-        let best=-Infinity,second=-Infinity,bestIndex=0,secondIndex=0;
-        for(let p=0;p<plates.length;p++){const plate=plates[p],dot=sx*plate.x+sy*plate.y+sz*plate.z;if(dot>best){second=best;secondIndex=bestIndex;best=dot;bestIndex=p;}else if(dot>second){second=dot;secondIndex=p;}}
-        const boundary=clamp(1-(best-second)*26,0,1),primary=plates[bestIndex],neighbour=plates[secondIndex];
-        let stress;if(primary.continental&&neighbour.continental)stress=.085;else if(primary.continental!==neighbour.continental)stress=primary.continental?.052:-.045;else stress=primary.mode===0?.058:primary.mode===1?-.047:.008;
-        height[y*MAP_W+x]=continent*.68+detail*.24+fine*.08+boundary*stress*tectonics;
-      }
-    }
-    if(erosion>.001){let source=height,target=new Float32Array(size);const blend=erosion*.15;
-      for(let pass=0;pass<2;pass++){for(let y=0;y<MAP_H;y++){const up=Math.max(0,y-1)*MAP_W,down=Math.min(MAP_H-1,y+1)*MAP_W,row=y*MAP_W;
-        for(let x=0;x<MAP_W;x++){const left=row+(x-1+MAP_W)%MAP_W,right=row+(x+1)%MAP_W,i=row+x,avg=(source[left]+source[right]+source[up+x]+source[down+x])*.25;target[i]=lerp(source[i],avg,blend);}}
-        const swap=source;source=target;target=swap;
-      }height.set(source);
-    }
-    for(let y=0;y<MAP_H;y++){const lat=Math.PI/2-((y+.5)/MAP_H)*Math.PI,latSin=Math.sin(lat),latCos=Math.cos(lat),absLat=Math.abs(lat*180/Math.PI);
-      for(let x=0;x<MAP_W;x++){const lon=((x+.5)/MAP_W)*TAU-Math.PI,sx=latCos*Math.cos(lon),sy=latSin,sz=latCos*Math.sin(lon),idx=y*MAP_W+x;
-        const h=height[idx],alt=h-threshold,seasonal=Math.sin(seasonPhase)*Math.sin(lat)*12;
-        const t=30-absLat*.48+tempOffset+seasonal-Math.max(0,alt)*130,rain=fbm3(sx,sy,sz,4.7,2,seed+1907);
-        const east=height[y*MAP_W+(x+2)%MAP_W],west=height[y*MAP_W+(x-2+MAP_W)%MAP_W],windward=clamp(.5+(east-west)*1.8,0,1);
-        const wet=clamp(humidity*.58+rain*.25+(1-Math.abs(latSin))*.15+windward*.12-Math.max(0,alt)*.18,0,1);
-        temperature[idx]=t;moisture[idx]=wet;totalTemp+=t;
-        let b;if(h<=threshold)b=t<-8?2:(h>threshold-.035?1:0);else if(t<-16)b=3;else if(t<-1)b=4;else if(alt>.135-relief*.0085)b=5;else if(wet<.22&&t>7)b=6;else if(t<7&&wet>.40)b=11;else if(wet<.38&&t>16)b=7;else if(wet>.78&&t>17)b=10;else if(wet>.51&&t>4)b=9;else b=8;
-        biome[idx]=b;counts[b]++;if(h>threshold)landCount++;
-      }
-    }
+    const height = fields.heightField instanceof Float32Array ? fields.heightField : new Float32Array(fields.heightField);
+    const temperature = fields.temperature instanceof Float32Array ? fields.temperature : new Float32Array(fields.temperature);
+    const moisture = fields.moisture instanceof Float32Array ? fields.moisture : new Float32Array(fields.moisture);
+    const biome = fields.biome instanceof Uint8Array ? fields.biome : new Uint8Array(fields.biome);
+    const counts = fields.counts instanceof Uint32Array ? fields.counts : new Uint32Array(fields.counts);
+    const threshold = fields.threshold, landCount = fields.landCount, totalTemp = fields.totalTemp;
+    const seed = Number(state.seed) >>> 0;
     const riverData = generateRivers(height, threshold, seed);
     const civilization = applyCustomCities(generateCivilization(height, temperature, moisture, biome, riverData.mask, threshold, landCount, state.civilizationSeed));
-    const meanTemp = totalTemp / size;
-    const landPercent = landCount / size * 100;
+    const meanTemp = totalTemp / size, landPercent = landCount / size * 100;
     const rand = seededRandom(seed);
     const radius = Math.round(3400 + rand() * 7300);
     const dayHours = Math.round((10 + rand() * 50) * 10) / 10;
@@ -364,19 +351,69 @@
     const moons = Math.floor(rand() * 5);
     let uniqueBiomes = 0;
     for (let i = 0; i < counts.length; i++) if (counts[i] > size * 0.0001) uniqueBiomes++;
-    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100 - landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, ...civilization, generatedMs: performance.now() - started };
+    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, ...civilization, generatedMs: performance.now()-started };
     stats = { ...activeData };
-    drawTexture();
-    updateStats();
-    updateInterface();
-    renderCurrentView();
+    drawTexture(); updateStats(); updateInterface(); renderCurrentView();
     $("resolutionLabel").textContent = "PROCEDURAL SURFACE · " + MAP_W + " × " + MAP_H;
-    $("perfReadout").textContent = "CANVAS ENGINE · " + Math.round(activeData.generatedMs) + " MS";
     $("statusText").textContent = "Мир сформирован · " + state.name;
     $("renderOverlay").classList.add("hidden");
     state.isGenerating = false;
     $("perfReadout").textContent = (globe3D && globe3D.ready ? "WEBGL GLOBE · " : "CANVAS FALLBACK · ") + Math.round(activeData.generatedMs) + " MS";
     startAnimation();
+  }
+
+  function runTerrainFallback(job) {
+    try {
+      if (!window.PlanetForgeGenerator) throw new Error("Процедурный генератор не загружен");
+      finishPlanetFields(window.PlanetForgeGenerator.generateFields(job.settings), job.started);
+    } catch (error) { reportGenerationError(error); }
+  }
+
+  function createTerrainWorker() {
+    if (typeof Worker === "undefined") return null;
+    try {
+      const worker = new Worker("assets/js/planet-worker.js");
+      worker.onmessage = (event) => {
+        const job = pendingTerrainJob, message = event.data || {};
+        if (!job || job.worker !== worker || message.jobId !== job.id) return;
+        pendingTerrainJob = null;
+        if (message.error) { runTerrainFallback(job); return; }
+        try { finishPlanetFields(message.fields, job.started); }
+        catch (error) { reportGenerationError(error); }
+      };
+      worker.onerror = (event) => {
+        const job = pendingTerrainJob;
+        if (!job || job.worker !== worker) return;
+        pendingTerrainJob = null;
+        worker.terminate();
+        if (terrainWorker === worker) terrainWorker = null;
+        runTerrainFallback(job);
+      };
+      return worker;
+    } catch (_) { return null; }
+  }
+
+  function generatePlanet() {
+    const started = performance.now(), settings = terrainSettings();
+    const job = { id: ++terrainJobSequence, started, settings, worker: null };
+    // Cancel a stale request when a user keeps dragging sliders; only the most
+    // recent parameter set should consume CPU and update the visible world.
+    if (pendingTerrainJob) {
+      pendingTerrainJob.worker.terminate();
+      if (terrainWorker === pendingTerrainJob.worker) terrainWorker = null;
+      pendingTerrainJob = null;
+    }
+    if (!terrainWorker) terrainWorker = createTerrainWorker();
+    if (!terrainWorker) { runTerrainFallback(job); return; }
+    job.worker = terrainWorker;
+    pendingTerrainJob = job;
+    try { terrainWorker.postMessage({ jobId: job.id, settings }); }
+    catch (_) {
+      pendingTerrainJob = null;
+      terrainWorker.terminate();
+      terrainWorker = null;
+      runTerrainFallback(job);
+    }
   }
 
   function drawTexture() {

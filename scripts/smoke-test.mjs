@@ -1,20 +1,44 @@
 import { readFileSync, existsSync } from "node:fs";
 import assert from "node:assert/strict";
-const html=readFileSync("index.html","utf8"),js=readFileSync("assets/js/app.js","utf8"),css=readFileSync("assets/css/style.css","utf8");
-const renderer=readFileSync("assets/js/globe3d.js","utf8"),historyModule=readFileSync("assets/js/history.js","utf8"),shareModule=readFileSync("assets/js/share.js","utf8");
-const ids=[...html.matchAll(/\\bid=["']([^"']+)["']/g)].map(m=>m[1]),idSet=new Set(ids);
+
+const html=readFileSync("index.html","utf8");
+const js=readFileSync("assets/js/app.js","utf8");
+const css=readFileSync("assets/css/style.css","utf8");
+const renderer=readFileSync("assets/js/globe3d.js","utf8");
+const worker=readFileSync("assets/js/planet-worker.js","utf8");
+const generator=readFileSync("assets/js/generator.js","utf8");
+const historyModule=readFileSync("assets/js/history.js","utf8");
+const shareModule=readFileSync("assets/js/share.js","utf8");
+
+const ids=[...html.matchAll(/\bid=["']([^"']+)["']/g)].map(m=>m[1]);
+const idSet=new Set(ids);
 assert.equal(ids.length,idSet.size,"HTML must not contain duplicate ids");
-const refs=[...js.matchAll(/\\$\\(["']([^"']+)["']\\)/g)].map(m=>m[1]),missing=[...new Set(refs)].filter(id=>!idSet.has(id));
+const refs=[...js.matchAll(/\$\(["']([^"']+)["']\)/g)].map(m=>m[1]);
+const missing=[...new Set(refs)].filter(id=>!idSet.has(id));
 assert.deepEqual(missing,[],"Missing UI IDs: "+missing.join(", "));
-for(const path of ["assets/css/style.css","assets/js/app.js","assets/js/globe3d.js","assets/js/history.js","assets/js/share.js","assets/favicon.svg",".nojekyll"])assert.ok(existsSync(path),"Missing static asset "+path);
-for(const symbol of ["generateRivers","generateCivilization","applyCustomCities","refreshCivilization","drawCivilizationGlobe","drawCivilizationMap","exportPNG","exportGeographyCSV","projectJSON","restoreProject","editOrAddCity"])assert.ok(js.includes("function "+symbol+"("),"Missing function "+symbol);
+
+for(const path of ["assets/css/style.css","assets/js/app.js","assets/js/globe3d.js","assets/js/generator.js","assets/js/planet-worker.js","assets/js/history.js","assets/js/share.js","assets/favicon.svg",".nojekyll"])assert.ok(existsSync(path),"Missing static asset "+path);
+for(const symbol of ["generateRivers","generateCivilization","applyCustomCities","refreshCivilization","drawCivilizationGlobe","drawCivilizationMap","exportPNG","exportGeographyCSV","projectJSON","restoreProject","editOrAddCity","finishPlanetFields","createTerrainWorker"])assert.ok(js.includes("function "+symbol+"("),"Missing function "+symbol);
 for(const id of ["showRivers","showCities","showRoutes","showBorders","regenerateCivBtn","cityCountStat","countryCountStat","riverCountStat","globe3dCanvas","undoBtn","redoBtn","shareBtn","tectonics","erosion","season"])assert.ok(idSet.has(id),"Missing interface control "+id);
 for(const feature of ["uSurface","uMode","cloudNoise","uRotation","webglcontextlost"])assert.ok(renderer.includes(feature),"Missing WebGL feature "+feature);
+assert.ok(worker.includes("importScripts")&&worker.includes("postMessage"),"Worker message transport incomplete");
+assert.ok(generator.includes("function generateFields")&&generator.includes("boundary*stress*tectonics"),"Terrain generator missing plate model");
 assert.ok(historyModule.includes("undoStack")&&historyModule.includes("redoStack"),"Undo/redo module incomplete");
-assert.ok(shareModule.includes("createURL")&&shareModule.includes("readFromLocation"),"Share module incomplete");
-assert.ok(html.includes('value="hydrology"')&&html.includes('value="political"'),"Missing map layers");
-assert.ok(html.includes("assets/js/globe3d.js")&&html.includes("assets/js/history.js")&&html.includes("assets/js/share.js"),"New scripts aren't loaded");
-assert.ok(css.includes("#globe3dCanvas")&&css.includes(".history-button"),"Missing editor styles");
-assert.ok(js.includes("Math.sin(seasonPhase)")&&js.includes("tectonicLift")&&js.includes("filledHeight"),"Terrain model upgrade missing");
-assert.ok(js.includes("scale=[1,4,8].includes(Number(scale))"),"High resolution export missing");
-console.log("PlanetForge smoke tests passed: UI, WebGL, history, share links, seasonal climate, tectonics, hydrology, city editor, and 2K/4K exports.");
+assert.ok(shareModule.includes("createURL")&&shareModule.includes("readFromLocation"),"Share-link module incomplete");
+assert.ok(html.includes('value="hydrology"')&&html.includes('value="political"'),"Map layers missing");
+assert.ok(html.includes("assets/js/globe3d.js")&&html.includes("assets/js/history.js")&&html.includes("assets/js/share.js")&&html.includes("assets/js/generator.js"),"Scripts aren't loaded");
+assert.ok(css.includes("#globe3dCanvas")&&css.includes(".history-button"),"Editor styles missing");
+assert.ok(js.includes("Math.sin")&&js.includes("generateFields")&&js.includes("filledHeight"),"Terrain/hydrology model missing");
+assert.ok(js.includes("scale=[1,4,8].includes(Number(scale))"),"High resolution exports missing");
+
+// Execute the pure terrain generator at a small resolution and check reproducibility.
+await import("../assets/js/generator.js");
+const config={width:96,height:48,seed:12345,temperature:4,humidity:58,relief:5,tectonics:65,erosion:20,season:50,seaLevel:50,landmass:0};
+const a=globalThis.PlanetForgeGenerator.generateFields(config);
+const b=globalThis.PlanetForgeGenerator.generateFields(config);
+assert.equal(a.heightField.length,96*48);
+assert.equal(a.temperature.length,96*48);
+assert.ok(a.counts.reduce((sum,n)=>sum+n,0)===96*48,"Biome counts should cover every map cell");
+assert.deepEqual(Array.from(a.heightField),Array.from(b.heightField),"Same seed/settings should generate identical terrain");
+assert.deepEqual(Array.from(a.biome),Array.from(b.biome),"Same seed/settings should generate identical biomes");
+console.log("PlanetForge smoke tests passed: modular scripts, WebGL, Worker generation, determinism, editor, sharing and exports.");
