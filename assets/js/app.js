@@ -496,6 +496,7 @@
 
   function drawTexture() {
     const { heightField, temperature, moisture, tectonicField, biome, threshold, riverMask, lakeMask, deltaMask, territories, borders } = activeData;
+    const pureLayer=["heightmap","tectonics","temperature","moisture"].includes(state.layer);
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
@@ -532,15 +533,15 @@
           color[1] = Math.round(color[1] * hillShade);
           color[2] = Math.round(color[2] * hillShade);
         }
-        if (borders && borders[i] && (state.showBorders || state.layer === "political")) {
+        if (!pureLayer && borders && borders[i] && (state.showBorders || state.layer === "political")) {
           const mix = state.layer === "political" ? 0.72 : 0.38;
           color[0] = Math.round(lerp(color[0], 196, mix));
           color[1] = Math.round(lerp(color[1], 225, mix));
           color[2] = Math.round(lerp(color[2], 227, mix));
         }
-        if (lakeMask && lakeMask[i] && (state.showLakes || state.layer === "hydrology")) color = [42, 127, 170];
-        if (deltaMask && deltaMask[i] && (state.showDeltas || state.layer === "hydrology")) color = [88, 182, 160];
-        if (riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
+        if (!pureLayer && lakeMask && lakeMask[i] && (state.showLakes || state.layer === "hydrology")) color = [42, 127, 170];
+        if (!pureLayer && deltaMask && deltaMask[i] && (state.showDeltas || state.layer === "hydrology")) color = [88, 182, 160];
+        if (!pureLayer && riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
           color = state.layer === "hydrology" ? [75, 201, 229] : [76, 181, 211];
         }
         const j = i * 4;
@@ -685,7 +686,7 @@
   }
 
   function drawCivilizationGlobe(cx, cy, radius) {
-    if (!activeData || (!state.showCities && !state.showRoutes)) return;
+    if (!activeData || ["heightmap","tectonics","temperature","moisture"].includes(state.layer) || (!state.showCities && !state.showRoutes)) return;
     const dpr = window.devicePixelRatio || 1;
     const visible = new Map();
     for (const city of activeData.cities || []) {
@@ -737,7 +738,7 @@
   }
 
   function drawCivilizationMap(w, h, outW, outH) {
-    if (!activeData || (!state.showCities && !state.showRoutes)) return;
+    if (!activeData || ["heightmap","tectonics","temperature","moisture"].includes(state.layer) || (!state.showCities && !state.showRoutes)) return;
     const dpr = window.devicePixelRatio || 1;
     const left = (w - outW) / 2, top = (h - outH) / 2;
     const points = new Map((activeData.cities || []).map((city) => [city.id, {
@@ -934,7 +935,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="heightmap"><span>HM</span><i><b>Heightmap PNG · 512 × 256</b><small>Grayscale высот для игрового движка</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="heightmap"><span>HM</span><i><b>Heightmap PNG · 512 × 256</b><small>Grayscale высот для игрового движка</small></i></button><button data-export="zip"><span>ZIP</span><i><b>Полный набор ресурсов</b><small>8 карт, JSON проекта и CSV-данные</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
@@ -946,6 +947,7 @@
       if (type === "png2k") exportNativePNG(4);
       if (type === "png4k") exportNativePNG(8);
       if (type === "heightmap") exportHeightmapPNG();
+      if (type === "zip") exportResourcePackZip();
       if (type === "json") exportJSON();
       if (type === "csv") exportCSV();
       if (type === "geo") exportGeographyCSV();
@@ -973,8 +975,9 @@
     const output=document.createElement("canvas");output.width=MAP_W*scale;output.height=MAP_H*scale;
     const out=output.getContext("2d");out.drawImage(sourceTexture,0,0,output.width,output.height);
     const points=new Map((renderData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
-    if(renderState.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
-    if(renderState.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
+    const includeOverlays=!["heightmap","tectonics","temperature","moisture"].includes(renderState.layer);
+    if(includeOverlays&&renderState.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
+    if(includeOverlays&&renderState.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
     output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(renderState.name)+"-"+scale+"x-"+renderState.layer+".png");$("statusText").textContent="Экспорт готов";showToast("PNG экспортирован: "+output.width+" × "+output.height);}else showToast("Не удалось экспортировать PNG");},"image/png");
   }
   function exportNativePNG(scale){
@@ -1037,6 +1040,77 @@
     const blob = new Blob([JSON.stringify(projectJSON(), null, 2)], { type: "application/json;charset=utf-8" });
     downloadBlob(blob, cleanFileName(state.name) + ".planetforge.json");
     showToast("Проект сохранён в JSON");
+  }
+  function zipStoredFiles(entries){
+    const encoder=new TextEncoder(),localParts=[],centralParts=[];let offset=0;
+    const crc32=bytes=>{let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return(crc^0xffffffff)>>>0;};
+    for(const entry of entries){
+      const name=encoder.encode(entry.name),data=entry.bytes instanceof Uint8Array?entry.bytes:new Uint8Array(entry.bytes),crc=crc32(data);
+      const local=new Uint8Array(30+name.length),lv=new DataView(local.buffer);
+      lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0x0800,true);lv.setUint16(8,0,true);lv.setUint16(10,0,true);lv.setUint16(12,0x21,true);
+      lv.setUint32(14,crc,true);lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);lv.setUint16(26,name.length,true);lv.setUint16(28,0,true);local.set(name,30);
+      localParts.push(local,data);
+      const central=new Uint8Array(46+name.length),cv=new DataView(central.buffer);
+      cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0x0800,true);cv.setUint16(10,0,true);cv.setUint16(12,0,true);cv.setUint16(14,0x21,true);
+      cv.setUint32(16,crc,true);cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);cv.setUint16(28,name.length,true);cv.setUint16(30,0,true);cv.setUint16(32,0,true);cv.setUint16(34,0,true);cv.setUint16(36,0,true);cv.setUint32(38,0,true);cv.setUint32(42,offset,true);central.set(name,46);
+      centralParts.push(central);offset+=local.length+data.length;
+    }
+    const centralOffset=offset,centralSize=centralParts.reduce((sum,part)=>sum+part.length,0),end=new Uint8Array(22),ev=new DataView(end.buffer);
+    ev.setUint32(0,0x06054b50,true);ev.setUint16(4,0,true);ev.setUint16(6,0,true);ev.setUint16(8,entries.length,true);ev.setUint16(10,entries.length,true);ev.setUint32(12,centralSize,true);ev.setUint32(16,centralOffset,true);ev.setUint16(20,0,true);
+    const zip=new Uint8Array(offset+centralSize+end.length);let cursor=0;
+    for(const part of localParts){zip.set(part,cursor);cursor+=part.length;}
+    for(const part of centralParts){zip.set(part,cursor);cursor+=part.length;}
+    zip.set(end,cursor);return zip;
+  }
+  async function canvasPNGBytes(width,height,pixels){
+    const canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext("2d",{alpha:false}),image=ctx.createImageData(width,height);
+    image.data.set(new Uint8ClampedArray(pixels));ctx.putImageData(image,0,0);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
+    if(!blob)throw new Error("PNG conversion failed");
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+  function buildBiomeCSV(){
+    const total=MAP_W*MAP_H,lines=["biome_id,biome,share_percent,pixel_count"];
+    activeData.counts.forEach((count,id)=>lines.push([id,'"'+BIOMES[id].name.replace(/"/g,'""')+'"',(count/total*100).toFixed(3),count].join(",")));
+    return "\uFEFF"+lines.join("\r\n");
+  }
+  function buildGeographyCSV(){
+    const lines=["record_type,id,name,latitude,longitude,country_id,from_id,to_id,population"];
+    for(const city of activeData.cities||[])lines.push(["city",city.id,'"'+String(city.name).replace(/"/g,'""')+'"',city.lat.toFixed(5),city.lon.toFixed(5),city.countryId,"","",city.population||0].join(","));
+    for(const route of activeData.routes||[])lines.push(["trade_route","","","","",route.countryId,route.from,route.to,""].join(","));
+    return "\uFEFF"+lines.join("\r\n");
+  }
+  async function exportResourcePackZip(){
+    if(!activeData){showToast("Мир ещё не готов к экспорту");return;}
+    if(exportWorker){exportWorker.terminate();exportWorker=null;}
+    const jobId=++exportJobSequence,worker=new Worker("assets/js/export-worker.js");exportWorker=worker;
+    const layers=["biome","elevation","heightmap","tectonics","temperature","moisture","hydrology","political"];
+    const settings={...terrainSettings(),width:MAP_W,height:MAP_H,seed:Number(state.seed)>>>0};
+    const options={baseWidth:MAP_W,baseHeight:MAP_H,showRivers:state.showRivers,showLakes:state.showLakes,showDeltas:state.showDeltas,showBorders:state.showBorders,
+      riverMask:activeData.riverMask?activeData.riverMask.slice():null,lakeMask:activeData.lakeMask?activeData.lakeMask.slice():null,deltaMask:activeData.deltaMask?activeData.deltaMask.slice():null,
+      territories:activeData.territories?activeData.territories.slice():null,borders:activeData.borders?activeData.borders.slice():null};
+    const project=JSON.stringify(projectJSON(),null,2),biomeCSV=buildBiomeCSV(),geographyCSV=buildGeographyCSV();
+    $("statusText").textContent="Готовим архив ресурсов…";showToast("Создаём 8 карт в отдельном Worker");
+    worker.onerror=()=>{if(exportWorker!==worker)return;exportWorker=null;worker.terminate();$("statusText").textContent="Ошибка экспорта";showToast("Не удалось создать архив ресурсов");};
+    worker.onmessage=async event=>{
+      const result=event.data||{};if(result.jobId!==jobId||exportWorker!==worker)return;
+      exportWorker=null;worker.terminate();
+      if(result.error||!Array.isArray(result.layers)){showToast("Не удалось сгенерировать карты для архива");return;}
+      try{
+        const encoder=new TextEncoder(),entries=[
+          {name:"planetforge-world.json",bytes:encoder.encode(project)},
+          {name:"biome-statistics.csv",bytes:encoder.encode(biomeCSV)},
+          {name:"cities-and-trade-routes.csv",bytes:encoder.encode(geographyCSV)},
+          {name:"README.txt",bytes:encoder.encode("PlanetForge resource pack\n\nEight PNG layers use one deterministic field generation.\nheightmap.png is grayscale elevation.\ntec tonics.png shows procedural plate-boundary activity.\nAll files are generated locally in the browser.\n")}
+        ];
+        for(const layer of result.layers)entries.push({name:layer.layer+".png",bytes:await canvasPNGBytes(layer.width,layer.height,layer.pixels)});
+        const zip=zipStoredFiles(entries);
+        downloadBlob(new Blob([zip],{type:"application/zip"}),cleanFileName(state.name)+"-planetforge-resources.zip");
+        $("statusText").textContent="Архив ресурсов готов";showToast("ZIP готов: 8 PNG-карт, JSON и CSV");
+      }catch(error){console.error(error);$("statusText").textContent="Ошибка архива";showToast("Не удалось упаковать ресурсы в ZIP");}
+    };
+    worker.postMessage({jobId,settings,layers,options});
   }
   function exportHeightmapPNG(){
     if(!activeData)return;

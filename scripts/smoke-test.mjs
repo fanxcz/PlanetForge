@@ -30,6 +30,7 @@ assert.ok(generator.includes("function generateFields")&&generator.includes("bou
 assert.ok(generator.includes("tectonicField")&&generator.includes('layer==="tectonics"')&&generator.includes('layer==="heightmap"'),"Tectonic and heightmap layers are missing");
 assert.ok(worker.includes("fields.tectonicField.buffer"),"Worker must transfer the tectonic field");
 assert.ok(js.includes("function exportHeightmapPNG(")&&js.includes('data-export="heightmap"'),"Heightmap game-asset export is missing");
+assert.ok(js.includes("function exportResourcePackZip(")&&js.includes("function zipStoredFiles(")&&js.includes('data-export="zip"'),"Complete ZIP resource pack export is missing");
 assert.ok(js.includes("function applyCustomTerritories(")&&js.includes("function paintBorderSegment(")&&js.includes("state.customTerritories"),"Editable persistent political borders are incomplete");
 assert.ok(historyModule.includes("undoStack")&&historyModule.includes("redoStack"),"Undo/redo module incomplete");
 assert.ok(shareModule.includes("createURL")&&shareModule.includes("readFromLocation"),"Share-link module incomplete");

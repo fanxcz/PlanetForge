@@ -103,3 +103,6 @@ PlanetForge/
 ## License
 
 The project is released under the MIT License. See [LICENSE](LICENSE).
+
+
+The resource pack is a self-contained ZIP archive generated without external packages. It contains eight PNG map layers, project JSON, biome statistics, and city/trade-route geography.
