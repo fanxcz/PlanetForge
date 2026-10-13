@@ -26,10 +26,11 @@
 - **Procedural hydrology:** downhill-flow accumulation draws river channels across the generated terrain.
 - **Civilization generator:** settlements favor habitable land near rivers and coasts; capitals define spherical territories, and trade routes connect towns within a state.
 - **Optional overlays:** toggle rivers, lakes, deltas, cities, trade routes, and national boundaries independently; regenerate civilizations without rebuilding the planet.
+- **Local auto-save and compare:** the latest draft is restored on the next visit; compare the active world with a saved world or curated gallery entry on the same 128 × 64 preview grid.
 - **Export:** native-resolution PNG, portable JSON project, CSV biome statistics, and city/trade-route geography CSV.
 - **Import and local archive:** save and load projects in the browser's local storage.
 - **Responsive layout** for desktop, tablet, and mobile screens.
-- **Privacy-first:** world generation happens in the browser. Saved worlds are not sent to a server.
+- **Privacy-first:** world generation happens in the browser. Saved worlds and auto-saves are not sent to a server. The gallery is a curated offline set, not a crowdsourced public gallery.
 
 ## Run locally
 

@@ -275,3 +275,21 @@ input[type=range]::-moz-range-thumb{width:10px;height:10px;border:2px solid #0c1
 .gallery-load-button:hover{background:#17322f;border-color:#4b9581}
 @media(max-width:680px){.gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px;gap:8px}.gallery-preview{height:90px}.gallery-orb{width:61px;height:61px}.gallery-card-copy{padding:9px}.gallery-card-title{align-items:flex-start;flex-direction:column;gap:4px}.gallery-card-copy p{font-size:9px;min-height:65px}.gallery-intro{padding:12px 15px}.gallery-modal .modal-foot{align-items:flex-start}.gallery-modal .modal-foot span{line-height:1.5}}
 @media(max-width:380px){.gallery-grid{grid-template-columns:1fr}.gallery-preview{height:110px}.gallery-card-title{flex-direction:row;align-items:center}.gallery-card-copy p{min-height:0}}
+
+
+/* Planet comparison and automatic local drafts */
+.compare-modal{width:min(760px,calc(100% - 28px))}
+.compare-picker{display:flex;align-items:center;gap:12px;padding:16px 20px 4px;color:#8ea2b8;font-size:10px}
+.compare-picker label{flex:1}
+.compare-picker .select-input{width:min(390px,60%)}
+.compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:15px 18px}
+.compare-card{min-width:0;padding:15px;border:1px solid #27394d;border-radius:8px;background:#0b1420}
+.compare-card>span{font:8px var(--mono);letter-spacing:1px;color:#77a18f}
+.compare-target>span{color:#80a8d0}
+.compare-card h3{font-size:16px;margin:9px 0 5px;color:#e0ebf6;overflow-wrap:anywhere}
+.compare-card>small{font:9px var(--mono);color:#71879e}
+.compare-metric{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px 0 0;margin-top:10px;border-top:1px solid #1c2939;color:#8498ad;font-size:9px}
+.compare-metric strong{font-size:12px;color:#d7e5f1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.compare-summary{margin:0 20px;padding:11px 13px;border:1px solid #233c40;border-radius:6px;background:#0c1c22;color:#98cfc2;font-size:10px;line-height:1.6}
+@media(max-width:680px){.compare-picker{flex-direction:column;align-items:stretch;padding:12px 15px 0}.compare-picker .select-input{width:100%}.compare-grid{padding:12px;gap:8px}.compare-card{padding:10px}.compare-card h3{font-size:13px}.compare-metric{align-items:flex-start;flex-direction:column;gap:5px}.compare-summary{margin:0 12px}.compare-modal .modal-foot{align-items:flex-start;line-height:1.5}}
+@media(max-width:380px){.compare-grid{grid-template-columns:1fr}}

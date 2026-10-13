@@ -5,6 +5,7 @@
   const MAP_H = 256;
   const TAU = Math.PI * 2;
   const STORAGE_KEY = "planetforge.savedWorlds.v1";
+  const AUTOSAVE_KEY = "planetforge.autosave.v1";
   const BIOMES = [
     { name: "Глубокий океан", color: [16, 48, 82] },
     { name: "Мелководье", color: [31, 105, 137] },
@@ -60,6 +61,7 @@
   let animationId = 0;
   let lastFrame = 0;
   let toastTimer = 0;
+  let autosaveTimer = 0;
   let pointerState = null;
   let dragMoved = false;
   let exportMenu = null;
@@ -81,6 +83,26 @@
     capture:projectJSON,restore:restoreProject,onChange:updateHistoryButtons,limit:70
   }):null;
   function checkpointHistory(){if(editHistory)editHistory.checkpoint();}
+  function scheduleAutosave(){
+    clearTimeout(autosaveTimer);
+    autosaveTimer=window.setTimeout(()=>{
+      try{
+        localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(projectJSON()));
+        const now=new Date();
+        $("autosaveStatus").textContent="LOCAL SAVE · "+now.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+        $("autosaveStatus").title="Последний автосейв: "+now.toLocaleString();
+      }catch(_){
+        $("autosaveStatus").textContent="LOCAL SAVE · UNAVAILABLE";
+        $("autosaveStatus").title="Браузер не разрешил записать автосохранение.";
+      }
+    },650);
+  }
+  function readAutosave(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(AUTOSAVE_KEY)||"null");
+      return saved&&saved.format==="planetforge-world"?saved:null;
+    }catch(_){return null;}
+  }
   function updateHistoryButtons(){const current=editHistory?editHistory.state():{canUndo:false,canRedo:false};$("undoBtn").disabled=!current.canUndo;$("redoBtn").disabled=!current.canRedo;}
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -319,7 +341,7 @@
     }
     return civ;
   }
-  function refreshCivilization(){if(!activeData)return;const civ=applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed));Object.assign(activeData,civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();}
+  function refreshCivilization(){if(!activeData)return;const civ=applyCustomCities(generateCivilization(activeData.heightField,activeData.temperature,activeData.moisture,activeData.biome,activeData.riverMask,activeData.threshold,activeData.landCount,state.civilizationSeed));Object.assign(activeData,civ);stats={...activeData};drawTexture();updateStats();renderCurrentView();scheduleAutosave();}
   function editOrAddCity(event){
     if(!activeData)return;const point=pointerCoordinates(event);if(!point)return;
     const x=clamp(Math.floor((point.lon+180)/360*MAP_W),0,MAP_W-1),y=clamp(Math.floor((90-point.lat)/180*MAP_H),0,MAP_H-1),lat=90-((y+0.5)/MAP_H)*180;
@@ -821,6 +843,7 @@
     $("zoomLabel").textContent = Math.round(state.zoom * 100) + "%";
     $("viewModeLabel").textContent = state.view === "globe" ? "PLANET VIEW / 3D RENDER" : "CARTOGRAPHY / EQUIRECTANGULAR";
     updateLegend();
+    scheduleAutosave();
   }
 
   function updateLegend() {
@@ -1027,6 +1050,45 @@
     scheduleGenerate();
     showToast("Открываем мир «" + world.name + "»");
   }
+  function comparisonStats(input){
+    const defaults=PRESETS[input.preset]||PRESETS.temperate,settings=input.settings||input;
+    const fields=window.PlanetForgeGenerator.generateFields({width:128,height:64,seed:normalizeSeed(input.seed),...defaults,...settings});
+    const size=fields.width*fields.height,landPercent=fields.landCount/size*100;
+    return{name:String(input.name||"Безымянный мир"),seed:normalizeSeed(input.seed),landPercent,waterPercent:100-landPercent,meanTemp:fields.totalTemp/size,uniqueBiomes:Array.from(fields.counts).filter(count=>count>size*.0001).length};
+  }
+  function fillCompareCard(prefix,world){
+    $(prefix+"Name").textContent=world.name;
+    $(prefix+"Seed").textContent="SEED "+world.seed;
+    $(prefix+"Land").textContent=world.landPercent.toFixed(1)+"%";
+    $(prefix+"Water").textContent=world.waterPercent.toFixed(1)+"%";
+    $(prefix+"Temp").textContent=world.meanTemp.toFixed(1)+" °C";
+    $(prefix+"Biomes").textContent=String(world.uniqueBiomes);
+  }
+  function renderComparison(){
+    if(!window.PlanetForgeGenerator)return;
+    const current=comparisonStats(projectJSON()),value=$("compareTarget").value;
+    let target=null;
+    if(value.startsWith("saved:")){
+      const saved=readSavedWorlds().find(world=>String(world.id)===value.slice(6));
+      if(saved)target=comparisonStats(saved);
+    }else if(value.startsWith("gallery:")){
+      const world=GALLERY_WORLDS[Number(value.slice(8))];
+      if(world)target=comparisonStats({...world,settings:PRESETS[world.preset]});
+    }
+    if(!target){$("compareSummary").textContent="Выберите доступный мир для сравнения.";return;}
+    fillCompareCard("compareCurrent",current);fillCompareCard("compareTarget",target);
+    const delta=current.landPercent-target.landPercent;
+    $("compareSummary").textContent=(delta>=0?"У текущего мира суши больше на ":"У текущего мира суши меньше на ")+Math.abs(delta).toFixed(1)+" п. п. · Сетка 128 × 64 для обоих миров.";
+  }
+  function openCompareDialog(){
+    const select=$("compareTarget"),saved=readSavedWorlds().filter(world=>!(Number(world.seed)===Number(state.seed)&&world.name===state.name));
+    const options=[];
+    saved.forEach(world=>options.push({value:"saved:"+world.id,label:"Сохранённый · "+String(world.name||"Безымянный мир")+" · "+Number(world.seed)}));
+    GALLERY_WORLDS.forEach((world,index)=>{if(Number(world.seed)!==Number(state.seed))options.push({value:"gallery:"+index,label:"Пример · "+world.name+" · "+world.seed});});
+    select.innerHTML=options.map(option=>'<option value="'+escapeHTML(option.value)+'">'+escapeHTML(option.label)+'</option>').join("");
+    if(!options.length){$("compareSummary").textContent="Нет доступных миров для сравнения.";return;}
+    select.value=options[0].value;renderComparison();$("compareDialog").showModal();
+  }
   function openSavedDialog() {
     drawSavedWorlds();
     $("savedDialog").showModal();
@@ -1117,6 +1179,7 @@
     state.name = $("planetName").value.slice(0, 48);
     $("statsPlanetName").textContent = state.name || "Безымянный мир";
     $("statusText").textContent = state.name ? "Редактирование · " + state.name : "Безымянный мир";
+    scheduleAutosave();
   });
   $("seedInput").addEventListener("change", () => {
     checkpointHistory();
@@ -1242,6 +1305,9 @@
     const button = event.target.closest("[data-gallery-index]");
     if (button) loadGalleryWorld(Number(button.dataset.galleryIndex));
   });
+  $("compareBtn").addEventListener("click",openCompareDialog);
+  $("closeCompareBtn").addEventListener("click",()=> $("compareDialog").close());
+  $("compareTarget").addEventListener("change",renderComparison);
   $("copySeedBtn").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(String(state.seed));
@@ -1317,6 +1383,8 @@
     $("renderOverlay").classList.remove("hidden");
     const shared=window.PlanetForgeShare?window.PlanetForgeShare.readFromLocation():null;
     if(shared){restoreProject(shared);if(editHistory)editHistory.reset();return;}
+    const draft=readAutosave();
+    if(draft){restoreProject(draft);if(editHistory)editHistory.reset();return;}
     window.setTimeout(()=>{
       try{generatePlanet();}
       catch(error){console.error(error);$("renderOverlay").classList.add("hidden");showToast("Ошибка генерации. Обновите страницу и попробуйте снова.");}

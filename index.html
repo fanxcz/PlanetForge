@@ -22,6 +22,7 @@
         <button class="icon-button history-button" id="redoBtn" title="Повторить (Ctrl+Y)" aria-label="Повторить" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0-7 7v1"/></svg></button>
         <button class="icon-button" id="shareBtn" title="Скопировать ссылку на этот мир" aria-label="Поделиться миром"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4"/></svg></button>
         <button class="icon-button" id="galleryBtn" title="Галерея примеров миров" aria-label="Галерея примеров миров"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
+        <button class="icon-button" id="compareBtn" title="Сравнить параметры планет" aria-label="Сравнить параметры планет"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 17V7m0 0-3 3m3-3 3 3M18 17V4m0 0-3 3m3-3 3 3"/></svg></button>
         <button class="icon-button" id="savedWorldsBtn" title="Сохранённые миры" aria-label="Сохранённые миры"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg></button>
         <button class="button button-quiet" id="importBtn"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Импорт</span></button>
         <button class="button button-primary" id="exportBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Экспорт</span></button>
@@ -159,7 +160,7 @@
         <div class="storage-note"><span>●</span> Сохраняется на этом устройстве</div>
       </aside>
     </main>
-    <footer class="app-footer"><span>PLANETFORGE <span class="footer-muted">/ WORLD GENERATION SYSTEM</span></span><span class="footer-center">MADE FOR CURIOUS MINDS <span>✦</span></span><span id="perfReadout">CANVAS ENGINE · READY</span></footer>
+    <footer class="app-footer"><span>PLANETFORGE <span class="footer-muted">/ WORLD GENERATION SYSTEM</span></span><span class="footer-center" id="autosaveStatus" title="Автосохранение хранится в браузере">LOCAL SAVE · READY</span><span id="perfReadout">CANVAS ENGINE · READY</span></footer>
   </div>
 
   <dialog id="savedDialog" class="modal">
@@ -172,6 +173,16 @@
     <p class="gallery-intro">Шесть стартовых миров с фиксированными seed. Откройте любой, изменяйте рельеф и климат, а затем сохраните или отправьте собственную ссылку.</p>
     <div id="galleryWorldsList" class="gallery-grid"></div>
     <div class="modal-foot"><span>Примеры встроены в сайт; публичная пользовательская галерея пока не требует аккаунтов и не сохраняет чужие проекты на сервере.</span><button class="button button-quiet" id="closeGalleryBtn">Закрыть</button></div>
+  </dialog>
+  <dialog id="compareDialog" class="modal compare-modal">
+    <form method="dialog" class="modal-head"><div><span class="eyebrow">PLANETARY ANALYSIS</span><h2>Сравнение миров</h2></div><button class="icon-button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
+    <div class="compare-picker"><label for="compareTarget">Сравнить текущую планету с</label><select id="compareTarget" class="select-input"></select></div>
+    <div class="compare-grid">
+      <section class="compare-card compare-current"><span>ТЕКУЩИЙ МИР</span><h3 id="compareCurrentName">—</h3><small id="compareCurrentSeed">SEED —</small><div class="compare-metric"><span>Суша</span><strong id="compareCurrentLand">—</strong></div><div class="compare-metric"><span>Вода</span><strong id="compareCurrentWater">—</strong></div><div class="compare-metric"><span>Средняя температура</span><strong id="compareCurrentTemp">—</strong></div><div class="compare-metric"><span>Разнообразие биомов</span><strong id="compareCurrentBiomes">—</strong></div></section>
+      <section class="compare-card compare-target"><span>ВЫБРАННЫЙ МИР</span><h3 id="compareTargetName">—</h3><small id="compareTargetSeed">SEED —</small><div class="compare-metric"><span>Суша</span><strong id="compareTargetLand">—</strong></div><div class="compare-metric"><span>Вода</span><strong id="compareTargetWater">—</strong></div><div class="compare-metric"><span>Средняя температура</span><strong id="compareTargetTemp">—</strong></div><div class="compare-metric"><span>Разнообразие биомов</span><strong id="compareTargetBiomes">—</strong></div></section>
+    </div>
+    <p id="compareSummary" class="compare-summary">Сравнение рассчитывается по одинаковому разрешению предварительного просмотра.</p>
+    <div class="modal-foot"><span>Сводные оценки рассчитываются локально с одинаковым размером сетки.</span><button class="button button-quiet" id="closeCompareBtn">Готово</button></div>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <input type="file" id="importFile" accept=".json,application/json" hidden>
