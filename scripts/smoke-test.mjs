@@ -20,7 +20,7 @@ assert.deepEqual(missing,[],"Missing UI IDs: "+missing.join(", "));
 
 for(const path of ["assets/css/style.css","assets/js/app.js","assets/js/globe3d.js","assets/js/generator.js","assets/js/planet-worker.js","assets/js/export-worker.js","assets/js/history.js","assets/js/share.js","assets/favicon.svg",".nojekyll"])assert.ok(existsSync(path),"Missing static asset "+path);
 for(const symbol of ["generateRivers","generateCivilization","applyCustomCities","refreshCivilization","drawCivilizationGlobe","drawCivilizationMap","exportPNG","exportGeographyCSV","projectJSON","restoreProject","editOrAddCity","finishPlanetFields","createTerrainWorker"])assert.ok(js.includes("function "+symbol+"("),"Missing function "+symbol);
-for(const id of ["showRivers","showCities","showRoutes","showBorders","regenerateCivBtn","cityCountStat","countryCountStat","riverCountStat","globe3dCanvas","undoBtn","redoBtn","shareBtn","tectonics","erosion","season"])assert.ok(idSet.has(id),"Missing interface control "+id);
+for(const id of ["showRivers","showLakes","showDeltas","showCities","showRoutes","showBorders","regenerateCivBtn","cityCountStat","countryCountStat","riverCountStat","lakeCountStat","deltaCountStat","globe3dCanvas","undoBtn","redoBtn","shareBtn","galleryBtn","galleryDialog","galleryWorldsList","tectonics","erosion","season"])assert.ok(idSet.has(id),"Missing interface control "+id);
 for(const feature of ["uSurface","uMode","cloudNoise","uRotation","webglcontextlost"])assert.ok(renderer.includes(feature),"Missing WebGL feature "+feature);
 assert.ok(worker.includes("importScripts")&&worker.includes("postMessage"),"Worker message transport incomplete");
 assert.ok(exportWorker.includes("renderTexture")&&exportWorker.includes("postMessage"),"High-resolution export worker incomplete");
@@ -34,6 +34,8 @@ assert.ok(css.includes("#globe3dCanvas")&&css.includes(".history-button"),"Edito
 assert.ok(generator.includes("seasonal=-Math.cos(seasonPhase)")&&js.includes("Math.sin")&&js.includes("generateFields")&&js.includes("filledHeight"),"Terrain/hydrology model missing");
 assert.ok(js.includes("JSON.stringify(job.settings) !== JSON.stringify(terrainSettings())"),"Stale worker jobs are not discarded");
 assert.ok(js.includes("scale=[1,4,8].includes(Number(scale))"),"High resolution exports missing");
+assert.ok(js.includes("lakeMask")&&js.includes("deltaMask"),"Procedural lake/delta masks are missing");
+assert.ok(generator.includes("lakeMask")&&generator.includes("deltaMask"),"High-resolution export must include lake/delta overlays");
 
 // Execute the pure terrain generator at a small resolution and check reproducibility.
 await import("../assets/js/generator.js");

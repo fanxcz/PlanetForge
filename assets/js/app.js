@@ -74,7 +74,7 @@
   const state = {
     ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
     rotating:true, isGenerating:false, civilizationSeed:(DEFAULTS.seed^0x51ed1234)>>>0,
-    showRivers:true,showCities:true,showRoutes:true,showBorders:true,
+    showRivers:true,showLakes:true,showDeltas:true,showCities:true,showRoutes:true,showBorders:true,
     tectonics:56,erosion:28,season:50,customCities:[],cityNames:{}
   };
   const editHistory=window.PlanetForgeHistory?window.PlanetForgeHistory.create({
@@ -137,9 +137,21 @@
       for(let dy=-1;dy<=1;dy++){const ny=y+dy;if(ny<0||ny>=MAP_H)continue;for(let dx=-1;dx<=1;dx++){if(dx===0&&dy===0)continue;const nx=(x+dx+MAP_W)%MAP_W,next=ny*MAP_W+nx;if(visited[next])continue;visited[next]=1;const spill=Math.max(height[next],node.level+0.000001);filled[next]=spill;downstream[next]=node.index;push(next,spill);}}
     }
     const order=landCells.slice().sort((a,b)=>filled[b]-filled[a]);for(const index of order){const next=downstream[index];if(next>=0)accumulation[next]+=accumulation[index];}
-    const mask=new Uint8Array(size),cutoff=Math.max(18,Math.round(landCells.length/1800));let count=0;
-    for(const index of landCells)if(accumulation[index]>=cutoff&&downstream[index]>=0){mask[index]=1;count++;}
-    return{mask,count,filledHeight:filled};
+    const mask=new Uint8Array(size),lakeMask=new Uint8Array(size),deltaMask=new Uint8Array(size),cutoff=Math.max(18,Math.round(landCells.length/1800));let count=0,lakeCount=0,deltaCount=0;
+    for(const index of landCells){
+      if(accumulation[index]>=cutoff&&downstream[index]>=0){mask[index]=1;count++;}
+      // Filled depressions become stylized lakes; a depth threshold filters single-cell noise.
+      if(filled[index]-height[index]>.0035){lakeMask[index]=1;lakeCount++;}
+    }
+    for(const index of landCells){
+      const next=downstream[index];
+      if(mask[index]&&next>=0&&height[next]<=threshold&&accumulation[index]>=cutoff*1.4){
+        deltaMask[index]=1;deltaCount++;
+        const x=index%MAP_W,y=Math.floor(index/MAP_W);
+        for(let dy=-1;dy<=1;dy++){const ny=y+dy;if(ny<0||ny>=MAP_H)continue;for(let dx=-1;dx<=1;dx++){const nx=(x+dx+MAP_W)%MAP_W,neighbor=ny*MAP_W+nx;if(height[neighbor]>threshold&&mask[neighbor]&&!deltaMask[neighbor]){deltaMask[neighbor]=1;deltaCount++;}}}
+      }
+    }
+    return{mask,count,filledHeight:filled,lakeMask,lakeCount,deltaMask,deltaCount};
   }
 
   function generateCivilization(height, temperature, moisture, biome, riverMask, threshold, landCount, civilizationSeed) {
@@ -361,7 +373,7 @@
     const moons = Math.floor(rand() * 5);
     let uniqueBiomes = 0;
     for (let i = 0; i < counts.length; i++) if (counts[i] > size * 0.0001) uniqueBiomes++;
-    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, ...civilization, generatedMs: performance.now()-started };
+    activeData = { width: MAP_W, height: MAP_H, heightField: height, temperature, moisture, biome, threshold, counts, landCount, meanTemp, landPercent, waterPercent: 100-landPercent, uniqueBiomes, radius, dayHours, tilt, moons, riverMask: riverData.mask, riverCount: riverData.count, lakeMask:riverData.lakeMask, lakeCount:riverData.lakeCount, deltaMask:riverData.deltaMask, deltaCount:riverData.deltaCount, filledHeight:riverData.filledHeight, ...civilization, generatedMs: performance.now()-started };
     stats = { ...activeData };
     drawTexture(); updateStats(); updateInterface(); renderCurrentView();
     $("resolutionLabel").textContent = "PROCEDURAL SURFACE · " + MAP_W + " × " + MAP_H;
@@ -430,7 +442,7 @@
   }
 
   function drawTexture() {
-    const { heightField, temperature, moisture, biome, threshold, riverMask, territories, borders } = activeData;
+    const { heightField, temperature, moisture, biome, threshold, riverMask, lakeMask, deltaMask, territories, borders } = activeData;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
         const i = y * MAP_W + x;
@@ -468,6 +480,8 @@
           color[1] = Math.round(lerp(color[1], 225, mix));
           color[2] = Math.round(lerp(color[2], 227, mix));
         }
+        if (lakeMask && lakeMask[i] && (state.showLakes || state.layer === "hydrology")) color = [42, 127, 170];
+        if (deltaMask && deltaMask[i] && (state.showDeltas || state.layer === "hydrology")) color = [88, 182, 160];
         if (riverMask && riverMask[i] && (state.showRivers || state.layer === "hydrology")) {
           color = state.layer === "hydrology" ? [75, 201, 229] : [76, 181, 211];
         }
@@ -754,6 +768,8 @@
     $("cityCountStat").textContent = String((stats.cities || []).length);
     $("countryCountStat").textContent = String(stats.countryCount || 0);
     $("riverCountStat").textContent = Number(stats.riverCount || 0).toLocaleString("ru-RU");
+    $("lakeCountStat").textContent = Number(stats.lakeCount || 0).toLocaleString("ru-RU");
+    $("deltaCountStat").textContent = Number(stats.deltaCount || 0).toLocaleString("ru-RU");
     const bars = $("biomeBars").querySelectorAll("i");
     bars.forEach((bar, i) => { bar.style.opacity = i < stats.uniqueBiomes ? "1" : ".18"; });
     const total = MAP_W * MAP_H;
@@ -797,6 +813,8 @@
     $("rotateBtn").setAttribute("aria-pressed", String(state.rotating));
     $("mapLayer").value = state.layer;
     $("showRivers").checked = state.showRivers;
+    $("showLakes").checked = state.showLakes;
+    $("showDeltas").checked = state.showDeltas;
     $("showCities").checked = state.showCities;
     $("showRoutes").checked = state.showRoutes;
     $("showBorders").checked = state.showBorders;
@@ -811,7 +829,7 @@
       elevation: [['Глубины','#12375a'],['Низменность','#4e8d79'],['Возвышенность','#a28b67'],['Горы','#c5ccc7'],['Вершины','#f6faf7']],
       temperature: [['Холод','#1f407d'],['Прохладно','#7dbdb7'],['Умеренно','#b3cb8f'],['Жарко','#d97d4d'],['Экстремум','#97373e']],
       moisture: [['Засуха','#976b43'],['Сухо','#c29b5b'],['Умеренно','#afb869'],['Влажно','#369281'],['Очень влажно','#2e70a3']],
-      hydrology: [['Океан','#12375a'],['Низменность','#4e8d79'],['Реки','#4bc9e5'],['Возвышенность','#a28b67'],['Горы','#c5ccc7']],
+      hydrology: [['Океан','#12375a'],['Озёра','#2a7faa'],['Дельты','#58b6a0'],['Реки','#4bc9e5'],['Возвышенность','#a28b67']],
       political: [['Территория A','#378494'],['Территория B','#7767ac'],['Территория C','#a97943'],['Границы','#c4e1e3'],['Поселения','#a6ffe5']]
     };
     $("mapLegend").innerHTML = labels[state.layer].map(([label,color]) => '<span><i class="legend-color" style="background:' + color + '"></i>' + label + '</span>').join("");
@@ -897,8 +915,8 @@
     const width=MAP_W*scale,height=MAP_H*scale,jobId=++exportJobSequence;
     const snapshotState={...state},snapshotData={cities:(activeData.cities||[]).map(city=>({...city})),routes:(activeData.routes||[]).map(route=>({...route}))};
     const settings={...terrainSettings(),width,height,seed:Number(state.seed)>>>0};
-    const options={baseWidth:MAP_W,baseHeight:MAP_H,layer:state.layer,showRivers:state.showRivers,showBorders:state.showBorders,
-      riverMask:activeData.riverMask?activeData.riverMask.slice():null,territories:activeData.territories?activeData.territories.slice():null,borders:activeData.borders?activeData.borders.slice():null};
+    const options={baseWidth:MAP_W,baseHeight:MAP_H,layer:state.layer,showRivers:state.showRivers,showLakes:state.showLakes,showDeltas:state.showDeltas,showBorders:state.showBorders,
+      riverMask:activeData.riverMask?activeData.riverMask.slice():null,lakeMask:activeData.lakeMask?activeData.lakeMask.slice():null,deltaMask:activeData.deltaMask?activeData.deltaMask.slice():null,territories:activeData.territories?activeData.territories.slice():null,borders:activeData.borders?activeData.borders.slice():null};
     if(exportWorker){exportWorker.terminate();exportWorker=null;}
     try{
       const worker=new Worker("assets/js/export-worker.js");exportWorker=worker;
@@ -943,7 +961,7 @@
       civilizationSeed: Number(state.civilizationSeed),
       customCities: state.customCities,
       cityNames: state.cityNames,
-      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders },
+      view: { layer: state.layer, zoom: state.zoom, showRivers: state.showRivers, showLakes: state.showLakes, showDeltas: state.showDeltas, showCities: state.showCities, showRoutes: state.showRoutes, showBorders: state.showBorders },
       exportedAt: new Date().toISOString()
     };
   }
@@ -1058,6 +1076,8 @@
     state.layer = input.view && ["biome", "elevation", "temperature", "moisture", "hydrology", "political"].includes(input.view.layer) ? input.view.layer : "biome";
     state.zoom = input.view && Number.isFinite(input.view.zoom) ? clamp(input.view.zoom, .65, 1.55) : 1;
     state.showRivers = input.view && typeof input.view.showRivers === "boolean" ? input.view.showRivers : true;
+    state.showLakes = input.view && typeof input.view.showLakes === "boolean" ? input.view.showLakes : true;
+    state.showDeltas = input.view && typeof input.view.showDeltas === "boolean" ? input.view.showDeltas : true;
     state.showCities = input.view && typeof input.view.showCities === "boolean" ? input.view.showCities : true;
     state.showRoutes = input.view && typeof input.view.showRoutes === "boolean" ? input.view.showRoutes : true;
     state.showBorders = input.view && typeof input.view.showBorders === "boolean" ? input.view.showBorders : true;
@@ -1154,7 +1174,7 @@
     updateInterface();
     if (activeData) { drawTexture(); renderCurrentView(); }
   });
-  [["showRivers", "showRivers"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
+  [["showRivers", "showRivers"], ["showLakes", "showLakes"], ["showDeltas", "showDeltas"], ["showCities", "showCities"], ["showRoutes", "showRoutes"], ["showBorders", "showBorders"]].forEach(([id, key]) => {
     $(id).addEventListener("change", () => {
       checkpointHistory();
       state[key] = $(id).checked;

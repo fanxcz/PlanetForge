@@ -84,6 +84,8 @@
           <div class="section-title"><span class="section-number">04</span><h2>Гидрология и цивилизация</h2></div>
           <div class="layer-toggles">
             <label class="layer-toggle" for="showRivers"><span><strong>Реки и речные русла</strong><small>Сток с возвышенностей к низинам</small></span><input id="showRivers" type="checkbox" checked></label>
+            <label class="layer-toggle" for="showLakes"><span><strong>Озёра и закрытые бассейны</strong><small>Области заполнения впадин</small></span><input id="showLakes" type="checkbox" checked></label>
+            <label class="layer-toggle" for="showDeltas"><span><strong>Речные дельты</strong><small>Устья рек с заметным стоком</small></span><input id="showDeltas" type="checkbox" checked></label>
             <label class="layer-toggle" for="showCities"><span><strong>Города и поселения</strong><small>Столицы, города и небольшие поселения</small></span><input id="showCities" type="checkbox" checked></label>
             <label class="layer-toggle" for="showRoutes"><span><strong>Торговые пути</strong><small>Связи между поселениями одного государства</small></span><input id="showRoutes" type="checkbox" checked></label>
             <label class="layer-toggle" for="showBorders"><span><strong>Границы государств</strong><small>Процедурные территории цивилизаций</small></span><input id="showBorders" type="checkbox" checked></label>
@@ -150,6 +152,8 @@
           <div class="property-row"><span>Поселения</span><strong id="cityCountStat">—</strong></div>
           <div class="property-row"><span>Государства</span><strong id="countryCountStat">—</strong></div>
           <div class="property-row"><span>Клетки речных русел</span><strong id="riverCountStat">—</strong></div>
+          <div class="property-row"><span>Озёрные клетки</span><strong id="lakeCountStat">—</strong></div>
+          <div class="property-row"><span>Дельтовые клетки</span><strong id="deltaCountStat">—</strong></div>
         </section>
         <button class="button button-save-world" id="saveWorldBtn"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg>Сохранить этот мир</button>
         <div class="storage-note"><span>●</span> Сохраняется на этом устройстве</div>
