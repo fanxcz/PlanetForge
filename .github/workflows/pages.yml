@@ -31,6 +31,7 @@ jobs:
           node --check assets/js/globe3d.js
           node --check assets/js/generator.js
           node --check assets/js/planet-worker.js
+          node --check assets/js/export-worker.js
           node --check assets/js/history.js
           node --check assets/js/share.js
 

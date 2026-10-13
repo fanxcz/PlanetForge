@@ -60,6 +60,8 @@
   let terrainWorker = null;
   let pendingTerrainJob = null;
   let terrainJobSequence = 0;
+  let exportWorker = null;
+  let exportJobSequence = 0;
 
   const state = {
     ...DEFAULTS, view:"globe", layer:"biome", rotation:0, zoom:1,
@@ -840,7 +842,7 @@
     if (exportMenu) { exportMenu.remove(); exportMenu = null; return; }
     exportMenu = document.createElement("div");
     exportMenu.className = "export-menu";
-    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>Увеличенный PNG · 2048 × 1024</b><small>Масштаб текущей текстуры 512 × 256</small></i></button><button data-export="png4k"><span>4K</span><i><b>Увеличенный PNG · 4096 × 2048</b><small>Масштаб текущей текстуры 512 × 256</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
+    exportMenu.innerHTML = '<strong>ЭКСПОРТ МИРА</strong><button data-export="png"><span>▧</span><i><b>PNG-карта · 512 × 256</b><small>Быстрый вариант</small></i></button><button data-export="png2k"><span>2K</span><i><b>PNG · 2048 × 1024</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="png4k"><span>4K</span><i><b>PNG · 4096 × 2048</b><small>Новая процедурная детализация в Worker</small></i></button><button data-export="json"><span>{ }</span><i><b>JSON-проект</b><small>Настройки, города и seed</small></i></button><button data-export="csv"><span>▤</span><i><b>CSV-статистика</b><small>Доли поверхности по биомам</small></i></button><button data-export="geo"><span>⌖</span><i><b>CSV-география</b><small>Координаты городов и торговых путей</small></i></button>';
     $("exportBtn").parentElement.style.position = "relative";
     $("exportBtn").parentElement.appendChild(exportMenu);
     exportMenu.addEventListener("click", (event) => {
@@ -849,8 +851,8 @@
       const type = button.dataset.export;
       exportMenu.remove(); exportMenu = null;
       if (type === "png") exportPNG(1);
-      if (type === "png2k") exportPNG(4);
-      if (type === "png4k") exportPNG(8);
+      if (type === "png2k") exportNativePNG(4);
+      if (type === "png4k") exportNativePNG(8);
       if (type === "json") exportJSON();
       if (type === "csv") exportCSV();
       if (type === "geo") exportGeographyCSV();
@@ -873,14 +875,48 @@
   function cleanFileName(name) {
     return (name || "planet").normalize("NFKD").replace(/[^a-zA-Z0-9а-яА-Я_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "planet";
   }
-  function exportPNG(scale=1){
-    if(!activeData)return;scale=[1,4,8].includes(Number(scale))?Number(scale):1;
+  function exportPNG(scale=1,sourceTexture=textureCanvas,renderState=state,renderData=activeData){
+    if(!renderData)return;scale=[1,4,8].includes(Number(scale))?Number(scale):1;
     const output=document.createElement("canvas");output.width=MAP_W*scale;output.height=MAP_H*scale;
-    const out=output.getContext("2d");out.drawImage(textureCanvas,0,0,output.width,output.height);
-    const points=new Map((activeData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
-    if(state.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of activeData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
-    if(state.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
-    output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(state.name)+"-"+scale+"x-"+state.layer+".png");showToast("PNG экспортирован: "+output.width+" × "+output.height);}else showToast("Не удалось экспортировать PNG");},"image/png");
+    const out=output.getContext("2d");out.drawImage(sourceTexture,0,0,output.width,output.height);
+    const points=new Map((renderData.cities||[]).map(city=>[city.id,{x:(city.x+.5)*scale,y:(city.y+.5)*scale,city}]));
+    if(renderState.showRoutes){out.strokeStyle="rgba(103,224,211,.9)";out.lineWidth=1.1*scale;out.setLineDash([2.6*scale,2.2*scale]);out.beginPath();for(const route of renderData.routes||[]){const a=points.get(route.from),b=points.get(route.to);if(!a||!b||Math.abs(a.x-b.x)>output.width/2)continue;out.moveTo(a.x,a.y);out.lineTo(b.x,b.y);}out.stroke();out.setLineDash([]);}
+    if(renderState.showCities)for(const p of points.values()){const city=p.city,capital=city.type==="capital";out.beginPath();out.fillStyle=capital?"#a6ffe5":city.type==="city"?"#90def0":"#d0dae5";out.arc(p.x,p.y,(capital?2.2:city.type==="city"?1.7:1.1)*scale,0,TAU);out.fill();if(capital||city.type==="city"){out.font=(6*scale)+"px ui-monospace, monospace";out.lineWidth=1.7*scale;out.strokeStyle="rgba(4,12,22,.92)";out.strokeText(city.name,p.x+3*scale,p.y-2.5*scale);out.fillStyle="#e2f5ff";out.fillText(city.name,p.x+3*scale,p.y-2.5*scale);}}
+    output.toBlob(blob=>{if(blob){downloadBlob(blob,cleanFileName(renderState.name)+"-"+scale+"x-"+renderState.layer+".png");$("statusText").textContent="Экспорт готов";showToast("PNG экспортирован: "+output.width+" × "+output.height);}else showToast("Не удалось экспортировать PNG");},"image/png");
+  }
+  function exportNativePNG(scale){
+    if(!activeData)return;
+    const width=MAP_W*scale,height=MAP_H*scale,jobId=++exportJobSequence;
+    const snapshotState={...state},snapshotData={cities:(activeData.cities||[]).map(city=>({...city})),routes:(activeData.routes||[]).map(route=>({...route}))};
+    const settings={...terrainSettings(),width,height,seed:Number(state.seed)>>>0};
+    const options={baseWidth:MAP_W,baseHeight:MAP_H,layer:state.layer,showRivers:state.showRivers,showBorders:state.showBorders,
+      riverMask:activeData.riverMask?activeData.riverMask.slice():null,territories:activeData.territories?activeData.territories.slice():null,borders:activeData.borders?activeData.borders.slice():null};
+    if(exportWorker){exportWorker.terminate();exportWorker=null;}
+    try{
+      const worker=new Worker("assets/js/export-worker.js");exportWorker=worker;
+      $("statusText").textContent="Генерируем детальную карту "+width+" × "+height+"…";
+      showToast("Экспорт высокого разрешения выполняется отдельно от интерфейса");
+      worker.onmessage=event=>{
+        const result=event.data||{};if(result.jobId!==jobId||exportWorker!==worker)return;
+        exportWorker=null;worker.terminate();
+        if(result.error){$("statusText").textContent="Ошибка экспорта";showToast("Не удалось создать детальную карту: "+result.error);return;}
+        try{
+          const source=document.createElement("canvas");source.width=result.width;source.height=result.height;
+          const sourceCtx=source.getContext("2d",{alpha:false}),imageData=sourceCtx.createImageData(result.width,result.height);
+          imageData.data.set(new Uint8ClampedArray(result.pixels));sourceCtx.putImageData(imageData,0,0);
+          exportPNG(scale,source,snapshotState,snapshotData);
+        }catch(error){console.error(error);$("statusText").textContent="Ошибка экспорта";showToast("Не удалось подготовить PNG");}
+      };
+      worker.onerror=()=>{
+        if(exportWorker!==worker)return;exportWorker=null;worker.terminate();$("statusText").textContent="Резервный экспорт";
+        showToast("Worker экспорта недоступен; будет сохранена увеличенная текущая карта");exportPNG(scale,textureCanvas,snapshotState,snapshotData);
+      };
+      worker.postMessage({jobId,settings,options});
+    }catch(error){
+      console.warn("Native-resolution exporter unavailable",error);
+      if(exportWorker){exportWorker.terminate();exportWorker=null;}
+      showToast("Worker недоступен; будет сохранена увеличенная текущая карта");exportPNG(scale,textureCanvas,snapshotState,snapshotData);
+    }
   }
   function exportGeographyCSV(){
     if(!activeData)return;const lines=["record_type,id,name,latitude,longitude,country_id,from_id,to_id,population"];

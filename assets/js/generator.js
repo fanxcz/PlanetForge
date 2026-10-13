@@ -13,6 +13,36 @@ function noise3(x,y,z,seed){
 }
 function fbm3(x,y,z,frequency,octaves,seed){let amp=.5,total=0,weight=0;for(let i=0;i<octaves;i++){total+=noise3(x*frequency,y*frequency,z*frequency,seed+i*1013)*amp;weight+=amp;frequency*=2;amp*=.5;}return total/weight;}
 function seededRandom(seed){let x=seed>>>0;return()=>{x+=0x6D2B79F5;let t=x;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+const BIOME_COLORS=[[16,48,82],[31,105,137],[74,133,158],[213,237,239],[142,166,151],[144,151,147],[194,151,83],[161,170,91],[105,157,91],[49,119,78],[27,91,71],[58,111,105]];
+const COUNTRY_COLORS=[[55,132,148],[119,103,172],[169,121,67],[73,142,105],[170,88,103],[76,119,173]];
+const HEIGHT_STOPS=[[0,[8,25,51]],[.30,[17,55,88]],[.48,[40,117,137]],[.50,[52,117,108]],[.56,[88,142,90]],[.64,[143,157,91]],[.73,[166,129,88]],[.84,[137,105,92]],[.94,[178,184,177]],[1,[246,250,247]]];
+const TEMP_STOPS=[[0,[31,64,125]],[.2,[62,133,175]],[.36,[121,189,183]],[.5,[179,203,143]],[.64,[228,196,105]],[.8,[217,125,77]],[1,[151,55,62]]];
+const MOIST_STOPS=[[0,[151,105,67]],[.2,[194,155,91]],[.4,[175,184,105]],[.6,[98,165,113]],[.8,[54,146,129]],[1,[46,112,163]]];
+function hueColor(t,stops){t=clamp(t,0,1);for(let i=1;i<stops.length;i++)if(t<=stops[i][0]){const a=stops[i-1],b=stops[i],q=(t-a[0])/Math.max(.00001,b[0]-a[0]);return[Math.round(lerp(a[1][0],b[1][0],q)),Math.round(lerp(a[1][1],b[1][1],q)),Math.round(lerp(a[1][2],b[1][2],q))];}return stops[stops.length-1][1].slice();}
+function renderTexture(config,layer="biome",options={}){
+ const fields=generateFields(config),W=fields.width,H=fields.height,size=W*H,threshold=fields.threshold;
+ const pixels=new Uint8ClampedArray(size*4),baseW=Math.max(1,Number(options.baseWidth)||512),baseH=Math.max(1,Number(options.baseHeight)||256);
+ const riverMask=options.riverMask,territories=options.territories,borders=options.borders;
+ const showRivers=options.showRivers!==false,showBorders=options.showBorders!==false;
+ for(let y=0;y<H;y++){const baseY=Math.min(baseH-1,Math.floor(y/H*baseH));
+  for(let x=0;x<W;x++){
+   const i=y*W+x,h=fields.heightField[i],left=y*W+Math.max(0,x-1),right=y*W+Math.min(W-1,x+1);
+   const up=Math.max(0,y-1)*W+x,down=Math.min(H-1,y+1)*W+x;
+   const slope=clamp(1+(fields.heightField[left]-fields.heightField[right])*4.8+(fields.heightField[up]-fields.heightField[down])*3.2,.72,1.24);
+   const baseIndex=baseY*baseW+Math.min(baseW-1,Math.floor(x/W*baseW));let color;
+   if(layer==="elevation")color=hueColor(clamp((h-threshold+.18)/.46,0,1),HEIGHT_STOPS);
+   else if(layer==="temperature")color=hueColor((fields.temperature[i]+35)/72,TEMP_STOPS);
+   else if(layer==="moisture")color=hueColor(fields.moisture[i],MOIST_STOPS);
+   else if(layer==="hydrology")color=h<=threshold?[Math.round(8+clamp((threshold-h)*95,0,20)),Math.round(27+clamp((threshold-h)*110,0,30)),Math.round(47+clamp((threshold-h)*150,0,45))]:hueColor(clamp((h-threshold+.18)/.46,0,1),HEIGHT_STOPS);
+   else if(layer==="political"){const owner=territories?territories[baseIndex]:255;color=h<=threshold?[7,17,29]:(owner!==255&&owner!==undefined?COUNTRY_COLORS[owner%COUNTRY_COLORS.length].slice():[91,99,105]);}
+   else{color=BIOME_COLORS[fields.biome[i]].slice();const ocean=fields.biome[i]<=2,shade=ocean?clamp(.87+(threshold-h)*.9,.75,1.02):slope;color[0]=Math.round(color[0]*shade);color[1]=Math.round(color[1]*shade);color[2]=Math.round(color[2]*shade);}
+   if(borders&&borders[baseIndex]&&(showBorders||layer==="political")){const mix=layer==="political"?.72:.38;color[0]=Math.round(lerp(color[0],196,mix));color[1]=Math.round(lerp(color[1],225,mix));color[2]=Math.round(lerp(color[2],227,mix));}
+   if(riverMask&&riverMask[baseIndex]&&(showRivers||layer==="hydrology"))color=layer==="hydrology"?[75,201,229]:[76,181,211];
+   const out=i*4;pixels[out]=color[0];pixels[out+1]=color[1];pixels[out+2]=color[2];pixels[out+3]=255;
+  }
+ }
+ return{width:W,height:H,pixels};
+}
 function generateFields(config){
  const W=Math.max(32,Math.min(4096,Math.round(Number(config.width)||512))),H=Math.max(16,Math.min(2048,Math.round(Number(config.height)||256)));
  const size=W*H,seed=Number(config.seed)>>>0;
