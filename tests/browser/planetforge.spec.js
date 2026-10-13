@@ -97,3 +97,34 @@ test("ZIP download includes the game's height, normal, biome and water-mask asse
     "biome-index.png","land-water-mask.png","biome.png","political.png"
   ]) expect(zipNames).toContain(filename);
 });
+
+test("mobile layout has readable bottom navigation and no horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openReadyWorld(page);
+  const nav = page.locator("#mobileNav");
+  await expect(nav).toBeVisible();
+  await expect(page.locator("#planetStage")).toBeVisible();
+  const layout = await page.evaluate(() => ({
+    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    navHeight: document.querySelector("#mobileNav").getBoundingClientRect().height,
+    buttonHeight: document.querySelector('#mobileNav [data-mobile-view="world"]').getBoundingClientRect().height
+  }));
+  expect(layout.horizontalOverflow).toBe(false);
+  expect(layout.navHeight).toBeGreaterThanOrEqual(60);
+  expect(layout.buttonHeight).toBeGreaterThanOrEqual(48);
+
+  await page.locator('#mobileNav [data-mobile-view="settings"]').click();
+  await expect(page.locator(".left-sidebar")).toBeVisible();
+  await expect(page.locator(".viewport-column")).toBeHidden();
+  await expect(page.locator('#mobileNav [data-mobile-view="settings"]')).toHaveAttribute("aria-pressed", "true");
+
+  await page.locator('#mobileNav [data-mobile-view="data"]').click();
+  await expect(page.locator(".right-sidebar")).toBeVisible();
+  await expect(page.locator(".left-sidebar")).toBeHidden();
+  await expect(page.locator("#landStat")).toBeVisible();
+
+  await page.locator('#mobileNav [data-mobile-view="world"]').click();
+  await expect(page.locator(".planet-stage")).toBeVisible();
+  await expect(page.locator(".left-sidebar")).toBeHidden();
+  await expect(page.locator(".right-sidebar")).toBeHidden();
+});

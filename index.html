@@ -24,12 +24,26 @@
         <button class="icon-button" id="galleryBtn" title="Галерея примеров миров" aria-label="Галерея примеров миров"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
         <button class="icon-button" id="compareBtn" title="Сравнить параметры планет" aria-label="Сравнить параметры планет"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 17V7m0 0-3 3m3-3 3 3M18 17V4m0 0-3 3m3-3 3 3"/></svg></button>
         <button class="icon-button" id="savedWorldsBtn" title="Сохранённые миры" aria-label="Сохранённые миры"><svg viewBox="0 0 24 24"><path d="M5 4.75A1.75 1.75 0 0 1 6.75 3h8.1L19 7.15v12.1A1.75 1.75 0 0 1 17.25 21h-10.5A1.75 1.75 0 0 1 5 19.25z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg></button>
-        <button class="button button-quiet" id="importBtn"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Импорт</span></button>
-        <button class="button button-primary" id="exportBtn"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Экспорт</span></button>
+        <button class="button button-quiet" id="importBtn" title="Импортировать проект" aria-label="Импортировать проект"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Импорт</span></button>
+        <button class="button button-primary" id="exportBtn" title="Экспортировать проект" aria-label="Экспортировать проект"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Экспорт</span></button>
       </div>
     </header>
 
-    <main class="workspace">
+    <nav class="mobile-nav" id="mobileNav" aria-label="Разделы приложения">
+      <button class="mobile-nav-item active" type="button" data-mobile-view="world" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0-18"/></svg>
+        <span>Планета</span>
+      </button>
+      <button class="mobile-nav-item" type="button" data-mobile-view="settings" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+        <span>Настройки</span>
+      </button>
+      <button class="mobile-nav-item" type="button" data-mobile-view="data" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 5-7"/></svg>
+        <span>Данные</span>
+      </button>
+    </nav>
+    <main class="workspace" data-mobile-view="world">
       <aside class="sidebar left-sidebar">
         <div class="panel-heading"><div><span class="eyebrow">WORLD BUILDER</span><h1>Конструктор мира</h1></div><span class="heading-icon">✳</span></div>
         <section class="control-section">
@@ -219,5 +233,6 @@
   <script src="assets/js/share.js" defer></script>
   <script src="assets/js/globe3d.js" defer></script>
   <script src="assets/js/app.js" defer></script>
+  <script src="assets/js/mobile-nav.js" defer></script>
 </body>
 </html>
