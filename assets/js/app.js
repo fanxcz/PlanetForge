@@ -292,6 +292,8 @@
     const rotation = state.rotation;
     for (let py = 0; py < diameter; py++) {
       const ny = (r - py - 0.5) / r;
+      const lat = Math.asin(clamp(ny, -1, 1));
+      const v = clamp(Math.floor((0.5 - lat / Math.PI) * MAP_H), 0, MAP_H - 1);
       for (let px = 0; px < diameter; px++) {
         const nx = (px + 0.5 - r) / r;
         const rr = nx * nx + ny * ny;
@@ -301,11 +303,9 @@
           continue;
         }
         const nz = Math.sqrt(1 - rr);
-        const lat = Math.asin(clamp(ny, -1, 1));
         const lon = Math.atan2(nx, nz) + rotation;
         let u = Math.floor(((lon / TAU + 0.5) % 1) * MAP_W);
         if (u < 0) u += MAP_W;
-        const v = clamp(Math.floor((0.5 - lat / Math.PI) * MAP_H), 0, MAP_H - 1);
         const src = (v * MAP_W + u) * 4;
         const dot = clamp(nx * lightX + ny * lightY + nz * lightZ, 0, 1);
         const shade = 0.19 + 0.88 * dot;
